@@ -13,7 +13,7 @@ const REQUIRED_ENV_VARS = [
 ] as const;
 const INITIALIZATION_TIMEOUT_MS = 60_000;
 const SLOW_QUERY_THRESHOLD_MS = 1_000;
-const MIGRATION_VERSION = "v2_templates_campaigns_ms7";
+const MIGRATION_VERSION = "v3_email_logs_rls_ms8";
 
 function validateDatabaseEnv(): void {
   const missingEnvVars = REQUIRED_ENV_VARS.filter(
@@ -126,13 +126,13 @@ CREATE TABLE IF NOT EXISTS "Campaigns" (
 );
 
 CREATE TABLE IF NOT EXISTS "Email_logs" (
-  id BIGSERIAL PRIMARY KEY,
-  campaign_id INT NOT NULL REFERENCES "Campaigns"(id) ON DELETE CASCADE,
-  contact_id INT NOT NULL REFERENCES "Contacts"(id) ON DELETE CASCADE,
-  status VARCHAR NOT NULL,
-  err_message TEXT,
-  sent_at TIMESTAMPTZ,
-  opened_at TIMESTAMPTZ
+  id SERIAL PRIMARY KEY,
+  workspace_id INT NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
+  campaign_id INT REFERENCES "Campaigns"(id) ON DELETE SET NULL,
+  contact_id INT REFERENCES "Contacts"(id) ON DELETE CASCADE,
+  status VARCHAR NOT NULL DEFAULT 'sent',
+  error_message TEXT,
+  sent_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_workspaces_owner_id ON "Workspaces"(owner_id);
@@ -144,6 +144,7 @@ CREATE INDEX IF NOT EXISTS idx_contact_list_relation_list_id ON "Contact_list_re
 CREATE INDEX IF NOT EXISTS idx_templates_workspace_id ON "Templates"(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_campaigns_workspace_id ON "Campaigns"(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_campaigns_template_id ON "Campaigns"(template_id);
+CREATE INDEX IF NOT EXISTS idx_email_logs_workspace_id ON "Email_logs"(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_email_logs_campaign_id ON "Email_logs"(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_email_logs_contact_id ON "Email_logs"(contact_id);
 CREATE INDEX IF NOT EXISTS idx_contacts_properties_gin ON "Contacts" USING GIN (properties);
@@ -189,6 +190,49 @@ ALTER TABLE "Campaigns" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Campaigns" FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS campaigns_workspace_isolation ON "Campaigns";
 CREATE POLICY campaigns_workspace_isolation ON "Campaigns"
+  USING (
+    workspace_id = COALESCE(NULLIF(current_setting('app.current_workspace_id', true), ''), '0')::INT
+  )
+  WITH CHECK (
+    workspace_id = COALESCE(NULLIF(current_setting('app.current_workspace_id', true), ''), '0')::INT
+  );
+
+-- MS-8: Evolve Email_logs for multi-tenant RLS (idempotent for pre-existing databases)
+DO $do$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'Email_logs' AND column_name = 'err_message'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'Email_logs' AND column_name = 'error_message'
+  ) THEN
+    ALTER TABLE "Email_logs" RENAME COLUMN err_message TO error_message;
+  END IF;
+END
+$do$;
+
+ALTER TABLE "Email_logs" ADD COLUMN IF NOT EXISTS workspace_id INT REFERENCES "Workspaces"(id) ON DELETE CASCADE;
+ALTER TABLE "Email_logs" ADD COLUMN IF NOT EXISTS error_message TEXT;
+ALTER TABLE "Email_logs" ALTER COLUMN status SET DEFAULT 'sent';
+ALTER TABLE "Email_logs" ALTER COLUMN sent_at SET DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE "Email_logs" ALTER COLUMN campaign_id DROP NOT NULL;
+ALTER TABLE "Email_logs" ALTER COLUMN contact_id DROP NOT NULL;
+
+DO $do$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM "Email_logs" WHERE workspace_id IS NULL) THEN
+    ALTER TABLE "Email_logs" ALTER COLUMN workspace_id SET NOT NULL;
+  END IF;
+END
+$do$;
+
+CREATE INDEX IF NOT EXISTS idx_email_logs_workspace_id ON "Email_logs"(workspace_id);
+
+ALTER TABLE "Email_logs" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Email_logs" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS email_logs_workspace_isolation ON "Email_logs";
+CREATE POLICY email_logs_workspace_isolation ON "Email_logs"
   USING (
     workspace_id = COALESCE(NULLIF(current_setting('app.current_workspace_id', true), ''), '0')::INT
   )

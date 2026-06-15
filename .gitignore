@@ -20,6 +20,11 @@
 # production
 /build
 
+# Documentation & Agent Rules
+AGENTS.md
+FLOW.md
+MVP.md
+
 # misc
 .DS_Store
 *.pem
