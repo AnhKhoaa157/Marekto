@@ -22,8 +22,20 @@
 
 # Documentation & Agent Rules
 AGENTS.md
+CLAUDE.md
 FLOW.md
 MVP.md
+FRONTEND_STRICT_MANIFESTO.md
+MISSION.md
+PHASE_REPAIR_BACKLOG.md
+PROJECT_OVERVIEW.md
+PROJECT_WORKTREE.md
+/docs/
+
+# Sensitive local Markdown reports
+BACKEND_FINAL_AUDIT_REPORT.md
+*_AUDIT_REPORT.md
+*_FINAL_AUDIT_REPORT.md
 
 # misc
 .DS_Store

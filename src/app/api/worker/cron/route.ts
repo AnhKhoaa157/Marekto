@@ -1,63 +1,45 @@
-import { NextResponse } from "next/server";
-import type { PoolClient } from "pg";
+import { NextResponse, type NextRequest } from "next/server";
 
+import {
+  buildContactSelection,
+  parseCampaignTargetFilters,
+  type CampaignTargetFilters,
+} from "@/lib/campaign-filters";
+import {
+  CLAIM_CAMPAIGN_SQL,
+  CLAIM_LEASE_MINUTES,
+  FAILED_STATUS,
+  PENDING_STATUS,
+  PROCESSING_STATUS,
+} from "@/lib/campaign-worker";
+import { authorizeCronRequest } from "@/lib/cron-auth";
 import { initializeDatabase, query, withWorkspace } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Direct "Contacts" columns that may be matched verbatim from target_filters.
-// Any other filter key is treated as a JSONB key inside "Contacts".properties.
-const CONTACT_FILTER_COLUMNS = new Set([
-  "email",
-  "first_name",
-  "last_name",
-  "phone",
-]);
+const DELIVERY_UNAVAILABLE_REASON = "Email delivery is not configured";
 
 const SELECT_ACTIVE_WORKSPACES_SQL =
-  'SELECT DISTINCT workspace_id FROM "Campaigns" ' +
-  "WHERE status = $1 AND run_at IS NOT NULL AND run_at <= NOW() " +
-  "ORDER BY workspace_id ASC";
-
-const SELECT_PENDING_CAMPAIGNS_SQL =
-  "SELECT id, workspace_id, template_id, target_filters " +
-  'FROM "Campaigns" ' +
-  "WHERE workspace_id = $1 AND status = $2 AND run_at IS NOT NULL AND run_at <= NOW() " +
-  "ORDER BY id ASC";
+  'SELECT id AS workspace_id FROM "Workspaces" ORDER BY id ASC';
 
 const SELECT_TEMPLATE_SQL =
-  'SELECT id, name, body_html, content FROM "Templates" ' +
-  "WHERE id = $1 AND workspace_id = $2";
+  'SELECT 1 FROM "Templates" WHERE id = $1 AND workspace_id = $2';
 
-const INSERT_EMAIL_LOGS_SQL =
-  'INSERT INTO "Email_logs" (workspace_id, campaign_id, contact_id, status) ' +
-  "SELECT $1, $2, contact_id, $3 FROM UNNEST($4::int[]) AS targeted(contact_id) " +
-  "RETURNING id";
-
-const UPDATE_CAMPAIGN_STATUS_SQL =
-  'UPDATE "Campaigns" SET status = $1, updated_at = NOW() ' +
-  "WHERE id = $2 AND workspace_id = $3";
-
-const PENDING_STATUS = "pending";
-const SENT_STATUS = "sent";
+const MARK_CAMPAIGN_FAILED_SQL =
+  'UPDATE "Campaigns" SET status = $1, processing_started_at = NULL, ' +
+  "failure_reason = $2, updated_at = NOW() " +
+  "WHERE id = $3 AND workspace_id = $4 AND status = $5";
 
 type WorkspaceRow = {
   workspace_id: number;
 };
 
-type PendingCampaignRow = {
+type ClaimedCampaignRow = {
   id: number;
   workspace_id: number;
   template_id: number | null;
-  target_filters: Record<string, unknown> | null;
-};
-
-type TemplateRow = {
-  id: number;
-  name: string;
-  body_html: string;
-  content: string | null;
+  target_filters: CampaignTargetFilters | null;
 };
 
 type ContactRow = {
@@ -67,163 +49,149 @@ type ContactRow = {
 
 type CampaignResult = {
   campaign_id: number;
-  template_id: number | null;
   recipients: number;
-  logged: number;
+  status: "failed";
+  reason: string;
 };
 
 type WorkspaceResult = {
   workspace_id: number;
   campaigns_processed: number;
+  campaigns_failed: number;
   emails_sent: number;
+  campaigns: CampaignResult[];
 };
 
-type ContactSelection = {
-  text: string;
-  params: unknown[];
-};
-
-/**
- * Build a parameterized SELECT over "Contacts" for the campaign's target_filters.
- * Whitelisted columns are matched directly; every other key is resolved against
- * the JSONB "properties" column with the key itself passed as a bound parameter
- * to keep the statement injection-safe. Empty filters select every contact in
- * the workspace.
- */
-function buildContactSelection(
+async function claimNextCampaign(
   workspaceId: number,
-  targetFilters: Record<string, unknown> | null,
-): ContactSelection {
-  const params: unknown[] = [workspaceId];
-  const conditions: string[] = ["workspace_id = $1"];
+): Promise<ClaimedCampaignRow | null> {
+  return withWorkspace(workspaceId, async (client) => {
+    const result = await client.query<ClaimedCampaignRow>(CLAIM_CAMPAIGN_SQL, [
+      workspaceId,
+      PROCESSING_STATUS,
+      PENDING_STATUS,
+      CLAIM_LEASE_MINUTES,
+    ]);
 
-  for (const [key, rawValue] of Object.entries(targetFilters ?? {})) {
-    if (rawValue === undefined) {
-      continue;
-    }
-
-    const value = rawValue === null ? null : String(rawValue);
-
-    if (CONTACT_FILTER_COLUMNS.has(key)) {
-      if (value === null) {
-        conditions.push(`"${key}" IS NULL`);
-        continue;
-      }
-
-      params.push(value);
-      conditions.push(`"${key}" = $${params.length}`);
-      continue;
-    }
-
-    params.push(key);
-    const keyIndex = params.length;
-
-    if (value === null) {
-      conditions.push(`properties->>$${keyIndex} IS NULL`);
-      continue;
-    }
-
-    params.push(value);
-    conditions.push(`properties->>$${keyIndex} = $${params.length}`);
-  }
-
-  const text =
-    'SELECT id, email FROM "Contacts" WHERE ' +
-    conditions.join(" AND ") +
-    " ORDER BY id ASC";
-
-  return { text, params };
+    return result.rows[0] ?? null;
+  });
 }
 
-async function processCampaign(
-  client: PoolClient,
+async function markCampaignFailed(
   workspaceId: number,
-  campaign: PendingCampaignRow,
-): Promise<CampaignResult> {
-  let template: TemplateRow | null = null;
-
-  if (campaign.template_id !== null) {
-    const templateResult = await client.query<TemplateRow>(SELECT_TEMPLATE_SQL, [
-      campaign.template_id,
+  campaignId: number,
+  reason: string,
+): Promise<void> {
+  await withWorkspace(workspaceId, async (client) => {
+    await client.query(MARK_CAMPAIGN_FAILED_SQL, [
+      FAILED_STATUS,
+      reason,
+      campaignId,
       workspaceId,
+      PROCESSING_STATUS,
     ]);
-    template = templateResult.rows[0] ?? null;
-  }
+  });
+}
 
-  const selection = buildContactSelection(workspaceId, campaign.target_filters);
-  const contactsResult = await client.query<ContactRow>(
-    selection.text,
-    selection.params,
-  );
-  const contacts = contactsResult.rows;
+async function processClaimedCampaign(
+  workspaceId: number,
+  campaign: ClaimedCampaignRow,
+): Promise<CampaignResult> {
+  const recipients = await withWorkspace(workspaceId, async (client) => {
+    if (campaign.template_id !== null) {
+      const templateResult = await client.query(SELECT_TEMPLATE_SQL, [
+        campaign.template_id,
+        workspaceId,
+      ]);
 
-  // Mock email transmission. Replace with Nodemailer/Resend integration later.
-  for (const contact of contacts) {
-    console.log(
-      `[worker] Sending campaign ${campaign.id} (template ${
-        template?.id ?? "none"
-      }) to ${contact.email} for workspace ${workspaceId}`,
+      if (templateResult.rowCount === 0) {
+        throw new Error("Campaign template is unavailable");
+      }
+    }
+
+    const filters = parseCampaignTargetFilters(campaign.target_filters);
+    const selection = buildContactSelection(workspaceId, filters);
+    const contactsResult = await client.query<ContactRow>(
+      selection.text,
+      selection.params,
     );
-  }
 
-  let logged = 0;
+    return contactsResult.rows.length;
+  });
 
-  if (contacts.length > 0) {
-    const contactIds = contacts.map((contact) => contact.id);
-    const insertResult = await client.query<{ id: number }>(
-      INSERT_EMAIL_LOGS_SQL,
-      [workspaceId, campaign.id, SENT_STATUS, contactIds],
-    );
-    logged = insertResult.rowCount ?? 0;
-  }
+  const reason =
+    recipients === 0
+      ? "No recipients matched the campaign filters"
+      : DELIVERY_UNAVAILABLE_REASON;
 
-  await client.query(UPDATE_CAMPAIGN_STATUS_SQL, [
-    SENT_STATUS,
-    campaign.id,
-    workspaceId,
-  ]);
+  await markCampaignFailed(workspaceId, campaign.id, reason);
 
   return {
     campaign_id: campaign.id,
-    template_id: campaign.template_id,
-    recipients: contacts.length,
-    logged,
+    recipients,
+    status: "failed",
+    reason,
   };
 }
 
 async function processWorkspace(workspaceId: number): Promise<WorkspaceResult> {
-  return withWorkspace(workspaceId, async (client) => {
-    const pendingResult = await client.query<PendingCampaignRow>(
-      SELECT_PENDING_CAMPAIGNS_SQL,
-      [workspaceId, PENDING_STATUS],
-    );
+  const campaigns: CampaignResult[] = [];
 
-    let emailsSent = 0;
+  while (true) {
+    const campaign = await claimNextCampaign(workspaceId);
 
-    for (const campaign of pendingResult.rows) {
-      const result = await processCampaign(client, workspaceId, campaign);
-      emailsSent += result.logged;
+    if (!campaign) {
+      break;
     }
 
-    return {
-      workspace_id: workspaceId,
-      campaigns_processed: pendingResult.rows.length,
-      emails_sent: emailsSent,
-    };
-  });
+    try {
+      campaigns.push(await processClaimedCampaign(workspaceId, campaign));
+    } catch (error) {
+      const failureMessage =
+        error instanceof Error ? error.message : "Campaign processing failed";
+
+      console.error(
+        `[worker] Failed to process campaign ${campaign.id} in workspace ${workspaceId}:`,
+        error,
+      );
+
+      await markCampaignFailed(workspaceId, campaign.id, failureMessage);
+      campaigns.push({
+        campaign_id: campaign.id,
+        recipients: 0,
+        status: "failed",
+        reason: failureMessage,
+      });
+    }
+  }
+
+  return {
+    workspace_id: workspaceId,
+    campaigns_processed: campaigns.length,
+    campaigns_failed: campaigns.length,
+    emails_sent: 0,
+    campaigns,
+  };
 }
 
-export async function GET() {
+async function runCronWorker(request: NextRequest) {
+  const authorization = authorizeCronRequest(
+    request.headers.get("authorization"),
+    process.env.CRON_SECRET,
+    process.env.NODE_ENV === "production",
+  );
+
+  if (!authorization.ok) {
+    return NextResponse.json(
+      { success: false, error: authorization.error },
+      { status: authorization.status },
+    );
+  }
+
   try {
     await initializeDatabase();
 
-    // Discovery runs without a workspace context, so the connecting role must be
-    // able to read across tenants (superuser / BYPASSRLS) for this step.
-    const workspacesResult = await query<WorkspaceRow>(
-      SELECT_ACTIVE_WORKSPACES_SQL,
-      [PENDING_STATUS],
-    );
-
+    const workspacesResult = await query<WorkspaceRow>(SELECT_ACTIVE_WORKSPACES_SQL);
     const results: WorkspaceResult[] = [];
 
     for (const { workspace_id } of workspacesResult.rows) {
@@ -237,12 +205,12 @@ export async function GET() {
       }
     }
 
-    const totalCampaigns = results.reduce(
+    const campaignsProcessed = results.reduce(
       (sum, result) => sum + result.campaigns_processed,
       0,
     );
-    const totalEmails = results.reduce(
-      (sum, result) => sum + result.emails_sent,
+    const campaignsFailed = results.reduce(
+      (sum, result) => sum + result.campaigns_failed,
       0,
     );
 
@@ -250,8 +218,10 @@ export async function GET() {
       success: true,
       data: {
         workspaces_processed: results.length,
-        campaigns_processed: totalCampaigns,
-        emails_sent: totalEmails,
+        campaigns_processed: campaignsProcessed,
+        campaigns_failed: campaignsFailed,
+        emails_sent: 0,
+        delivery_available: false,
         details: results,
       },
     });
@@ -263,4 +233,12 @@ export async function GET() {
 
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
+}
+
+export async function POST(request: NextRequest) {
+  return runCronWorker(request);
+}
+
+export async function GET(request: NextRequest) {
+  return runCronWorker(request);
 }

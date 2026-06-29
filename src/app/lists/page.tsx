@@ -1,0 +1,25 @@
+import { AppShell } from "@/components/dashboard/app-shell";
+import { ListsManager } from "@/components/resources/lists-manager";
+import { requireServerAuthSession } from "@/lib/server-auth";
+
+export const dynamic = "force-dynamic";
+
+export const metadata = {
+  title: "Lists | Marekto",
+  description: "Manage workspace contact lists in Marekto.",
+};
+
+export default async function ListsPage() {
+  await requireServerAuthSession();
+
+  return (
+    <AppShell
+      activeRoute="/lists"
+      authenticated
+      eyebrow="Audience"
+      title="Contact lists"
+    >
+      <ListsManager />
+    </AppShell>
+  );
+}

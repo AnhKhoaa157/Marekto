@@ -22,5 +22,79 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+/*
+ * Decorative grid backdrop for the public marketing homepage hero.
+ * Expressed as a reusable utility class because Tailwind has no token for a
+ * layered line-grid background image; kept low-contrast to stay subtle on dark
+ * surfaces. The fade variant masks the grid toward the edges so it does not
+ * compete with content.
+ */
+.marekto-grid {
+  background-image:
+    linear-gradient(to right, rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+/*
+ * Depth backdrop for the hero 3D stage. A subtle indigo top-glow and cyan
+ * output-glow over a near-black base give the transparent WebGL canvas (and the
+ * static SVG fallback) a premium sense of depth without noisy effects.
+ */
+.marekto-hero-stage {
+  background-color: #09090b;
+  background-image:
+    radial-gradient(
+      ellipse 80% 70% at 50% 30%,
+      rgba(79, 70, 229, 0.22),
+      transparent 70%
+    ),
+    radial-gradient(
+      circle at 50% 92%,
+      rgba(34, 211, 238, 0.14),
+      transparent 60%
+    );
+}
+
+.marekto-grid-fade {
+  -webkit-mask-image: radial-gradient(
+    ellipse 75% 60% at 50% 0%,
+    #000 35%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(
+    ellipse 75% 60% at 50% 0%,
+    #000 35%,
+    transparent 100%
+  );
+}
+
+/*
+ * Motion is opt-in only. Smooth anchor scrolling and the subtle entrance
+ * animation are defined inside the no-preference query so that reduced-motion
+ * visitors get instant, fully-visible content (the .marekto-fade-up class is a
+ * no-op for them, never leaving elements stuck at opacity 0).
+ */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  @keyframes marekto-fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .marekto-fade-up {
+    animation: marekto-fade-up 0.6s ease-out both;
+  }
 }

@@ -1,6 +1,7 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
 
 import { initializeDatabase, withWorkspace } from "@/lib/db";
+import { getWorkspaceIdFromHeaders } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,7 +9,7 @@ export const dynamic = "force-dynamic";
 const INSERT_CONTACT_SQL =
   'INSERT INTO "Contacts" (workspace_id, email, first_name, last_name, phone, properties) VALUES ($1, $2, $3, $4, $5, $6::jsonb) RETURNING *';
 const SELECT_CONTACTS_SQL =
-  'SELECT * FROM "Contacts" ORDER BY created_at DESC, id DESC';
+  'SELECT * FROM "Contacts" WHERE workspace_id = $1 ORDER BY created_at DESC, id DESC';
 
 type ContactRow = {
   id: number;
@@ -28,17 +29,6 @@ type CreateContactBody = {
   phone?: unknown;
   properties?: unknown;
 };
-
-function getWorkspaceId(request: NextRequest): number {
-  const headerValue = request.headers.get("x-workspace-id");
-  const workspaceId = headerValue ? Number(headerValue) : 1;
-
-  if (!Number.isInteger(workspaceId) || workspaceId <= 0) {
-    throw new Error("Invalid workspace id");
-  }
-
-  return workspaceId;
-}
 
 function asOptionalString(value: unknown): string | null {
   if (value === undefined || value === null) {
@@ -79,6 +69,7 @@ function parseCreateContactBody(body: CreateContactBody) {
 
 function statusForError(message: string): number {
   return [
+    "Missing workspace context",
     "Invalid workspace id",
     "Email is required",
     "Optional contact fields must be strings",
@@ -88,13 +79,22 @@ function statusForError(message: string): number {
     : 500;
 }
 
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "23505"
+  );
+}
+
 export async function GET(request: NextRequest) {
   try {
     await initializeDatabase();
 
-    const workspaceId = getWorkspaceId(request);
+    const workspaceId = getWorkspaceIdFromHeaders(request.headers);
     const contacts = await withWorkspace(workspaceId, async (client) => {
-      const result = await client.query<ContactRow>(SELECT_CONTACTS_SQL);
+      const result = await client.query<ContactRow>(SELECT_CONTACTS_SQL, [workspaceId]);
       return result.rows;
     });
 
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
   try {
     await initializeDatabase();
 
-    const workspaceId = getWorkspaceId(request);
+    const workspaceId = getWorkspaceIdFromHeaders(request.headers);
     const body = (await request.json()) as CreateContactBody;
     const contact = parseCreateContactBody(body);
 
@@ -148,14 +148,18 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Failed to create contact:", error);
 
-    const message = error instanceof Error ? error.message : "Failed to create contact";
+    const message = isUniqueViolation(error)
+      ? "Email already exists in this workspace"
+      : error instanceof Error
+        ? error.message
+        : "Failed to create contact";
 
     return NextResponse.json(
       {
         success: false,
         error: message,
       },
-      { status: statusForError(message) },
+      { status: isUniqueViolation(error) ? 400 : statusForError(message) },
     );
   }
 }

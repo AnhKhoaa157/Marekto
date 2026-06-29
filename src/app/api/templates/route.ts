@@ -1,6 +1,7 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
 
 import { initializeDatabase, withWorkspace } from "@/lib/db";
+import { getWorkspaceIdFromHeaders } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,17 +26,6 @@ type CreateTemplateBody = {
   body_html?: unknown;
   body_json?: unknown;
 };
-
-function getWorkspaceId(request: NextRequest): number {
-  const headerValue = request.headers.get("x-workspace-id");
-  const workspaceId = headerValue ? Number(headerValue) : 1;
-
-  if (!Number.isInteger(workspaceId) || workspaceId <= 0) {
-    throw new Error("Invalid workspace id");
-  }
-
-  return workspaceId;
-}
 
 function parseCreateTemplateBody(body: CreateTemplateBody) {
   if (typeof body.name !== "string" || body.name.trim().length === 0) {
@@ -65,6 +55,7 @@ function parseCreateTemplateBody(body: CreateTemplateBody) {
 
 function statusForError(message: string): number {
   return [
+    "Missing workspace context",
     "Invalid workspace id",
     "Name is required",
     "body_html must be a string",
@@ -78,7 +69,7 @@ export async function GET(request: NextRequest) {
   try {
     await initializeDatabase();
 
-    const workspaceId = getWorkspaceId(request);
+    const workspaceId = getWorkspaceIdFromHeaders(request.headers);
     const templates = await withWorkspace(workspaceId, async (client) => {
       const result = await client.query<TemplateRow>(SELECT_TEMPLATES_SQL, [workspaceId]);
       return result.rows;
@@ -101,7 +92,7 @@ export async function POST(request: NextRequest) {
   try {
     await initializeDatabase();
 
-    const workspaceId = getWorkspaceId(request);
+    const workspaceId = getWorkspaceIdFromHeaders(request.headers);
     const body = (await request.json()) as CreateTemplateBody;
     const template = parseCreateTemplateBody(body);
 

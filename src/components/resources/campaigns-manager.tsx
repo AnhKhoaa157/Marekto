@@ -1,0 +1,847 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
+
+import {
+  ResourceEmpty,
+  ResourceError,
+  ResourceLoading,
+} from "@/components/resources/resource-states";
+import {
+  ApiRequestError,
+  formatApiDate,
+  isRecord,
+  requestApi,
+} from "@/lib/client-api";
+
+type CampaignStatus = "draft" | "pending" | "processing" | "sent" | "failed";
+type DeliveryPlan = "draft" | "schedule";
+type AudienceMode = "all" | "saved";
+type SchedulePreset =
+  | "custom"
+  | "tomorrow-morning"
+  | "tomorrow-afternoon"
+  | "next-week-morning";
+
+type CampaignRow = {
+  id: number;
+  workspace_id: number;
+  template_id: number | null;
+  name: string;
+  status: CampaignStatus;
+  target_filters: Record<string, unknown>;
+  scheduled_at: string | null;
+  run_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type TemplateOption = {
+  id: number;
+  name: string;
+};
+
+function parseNullableDate(value: unknown): string | null {
+  if (value === null) {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    throw new Error("The campaign response contains an invalid date.");
+  }
+
+  return value;
+}
+
+function parseCampaignStatus(value: unknown): CampaignStatus {
+  if (
+    value === "draft" ||
+    value === "pending" ||
+    value === "processing" ||
+    value === "sent" ||
+    value === "failed"
+  ) {
+    return value;
+  }
+
+  throw new Error("The campaign response contains an invalid status.");
+}
+
+function parseCampaign(value: unknown): CampaignRow {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "number" ||
+    typeof value.workspace_id !== "number" ||
+    (value.template_id !== null && typeof value.template_id !== "number") ||
+    typeof value.name !== "string" ||
+    !isRecord(value.target_filters) ||
+    typeof value.created_at !== "string" ||
+    typeof value.updated_at !== "string"
+  ) {
+    throw new Error("The campaign response has an invalid shape.");
+  }
+
+  return {
+    id: value.id,
+    workspace_id: value.workspace_id,
+    template_id: value.template_id,
+    name: value.name,
+    status: parseCampaignStatus(value.status),
+    target_filters: value.target_filters,
+    scheduled_at: parseNullableDate(value.scheduled_at),
+    run_at: parseNullableDate(value.run_at),
+    created_at: value.created_at,
+    updated_at: value.updated_at,
+  };
+}
+
+function parseCampaigns(value: unknown): CampaignRow[] {
+  if (!Array.isArray(value)) {
+    throw new Error("The campaigns response is not a list.");
+  }
+
+  return value.map(parseCampaign);
+}
+
+function parseTemplateOption(value: unknown): TemplateOption {
+  if (!isRecord(value) || typeof value.id !== "number" || typeof value.name !== "string") {
+    throw new Error("The template response has an invalid shape.");
+  }
+
+  return { id: value.id, name: value.name };
+}
+
+function parseTemplateOptions(value: unknown): TemplateOption[] {
+  if (!Array.isArray(value)) {
+    throw new Error("The templates response is not a list.");
+  }
+
+  return value.map(parseTemplateOption);
+}
+
+function parseTargetFilters(value: string): Record<string, unknown> {
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(value || "{}");
+  } catch {
+    throw new Error("Target filters must contain valid JSON.");
+  }
+
+  if (!isRecord(parsed)) {
+    throw new Error("Target filters must be a JSON object.");
+  }
+
+  return parsed;
+}
+
+function hasAudienceFilters(filters: Record<string, unknown>): boolean {
+  return Object.keys(filters).length > 0;
+}
+
+function hasStoredAudienceFilters(value: string): boolean {
+  try {
+    return hasAudienceFilters(parseTargetFilters(value));
+  } catch {
+    return false;
+  }
+}
+
+function getDeliveryPlan(status: CampaignStatus): DeliveryPlan {
+  if (status === "pending") {
+    return "schedule";
+  }
+
+  return "draft";
+}
+
+function getCampaignStatus(plan: DeliveryPlan): CampaignStatus {
+  if (plan === "schedule") {
+    return "pending";
+  }
+
+  return "draft";
+}
+
+function getStatusLabel(status: CampaignStatus): string {
+  if (status === "pending") {
+    return "Scheduled";
+  }
+
+  if (status === "sent") {
+    return "Sent";
+  }
+
+  if (status === "processing") {
+    return "Processing";
+  }
+
+  if (status === "failed") {
+    return "Failed";
+  }
+
+  return "Draft";
+}
+
+function toLocalDateParts(value: string | null): { date: string; time: string } {
+  if (!value) {
+    return { date: "", time: "" };
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return { date: "", time: "" };
+  }
+
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  const localValue = localDate.toISOString();
+
+  return {
+    date: localValue.slice(0, 10),
+    time: localValue.slice(11, 16),
+  };
+}
+
+function formatDateInput(date: Date): string {
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return localDate.toISOString().slice(0, 10);
+}
+
+function getPresetDate(preset: Exclude<SchedulePreset, "custom">): {
+  date: string;
+  time: string;
+} {
+  const date = new Date();
+
+  if (preset.startsWith("tomorrow")) {
+    date.setDate(date.getDate() + 1);
+  }
+
+  if (preset === "next-week-morning") {
+    date.setDate(date.getDate() + 7);
+  }
+
+  const time = preset.endsWith("afternoon") ? "14:00" : "09:00";
+
+  return {
+    date: formatDateInput(date),
+    time,
+  };
+}
+
+function buildScheduledAt(date: string, time: string): string | null {
+  if (!date) {
+    return null;
+  }
+
+  const dateTime = new Date(`${date}T${time || "09:00"}`);
+
+  if (Number.isNaN(dateTime.getTime())) {
+    return null;
+  }
+
+  return dateTime.toISOString();
+}
+
+function statusClassName(status: CampaignStatus): string {
+  if (status === "sent") {
+    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
+  }
+
+  if (status === "pending") {
+    return "border-blue-500/30 bg-blue-500/10 text-blue-300";
+  }
+
+  if (status === "processing") {
+    return "border-amber-500/30 bg-amber-500/10 text-amber-300";
+  }
+
+  if (status === "failed") {
+    return "border-red-500/30 bg-red-500/10 text-red-300";
+  }
+
+  return "border-zinc-700 bg-zinc-800 text-zinc-300";
+}
+
+export function CampaignsManager() {
+  const router = useRouter();
+  const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
+  const [templates, setTemplates] = useState<TemplateOption[]>([]);
+  const [editingCampaign, setEditingCampaign] = useState<CampaignRow | null>(null);
+  const [name, setName] = useState("");
+  const [deliveryPlan, setDeliveryPlan] = useState<DeliveryPlan>("draft");
+  const [templateId, setTemplateId] = useState("");
+  const [schedulePreset, setSchedulePreset] = useState<SchedulePreset>("custom");
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [scheduleTime, setScheduleTime] = useState("");
+  const [audienceMode, setAudienceMode] = useState<AudienceMode>("all");
+  const [targetFilters, setTargetFilters] = useState("{}");
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<number | null>(null);
+
+  const handleUnauthorized = useCallback(() => {
+    router.push("/login");
+    router.refresh();
+  }, [router]);
+
+  const loadResources = useCallback(
+    async (signal?: AbortSignal) => {
+      try {
+        const [campaignRows, templateRows] = await Promise.all([
+          requestApi("/api/campaigns", { method: "GET", signal }, parseCampaigns),
+          requestApi("/api/templates", { method: "GET", signal }, parseTemplateOptions),
+        ]);
+        setCampaigns(campaignRows);
+        setTemplates(templateRows);
+      } catch (loadFailure) {
+        if (loadFailure instanceof DOMException && loadFailure.name === "AbortError") {
+          return;
+        }
+
+        if (loadFailure instanceof ApiRequestError && loadFailure.status === 401) {
+          handleUnauthorized();
+          return;
+        }
+
+        setLoadError(
+          loadFailure instanceof Error ? loadFailure.message : "Unable to load campaigns.",
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [handleUnauthorized],
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    void Promise.all([
+      requestApi(
+        "/api/campaigns",
+        { method: "GET", signal: controller.signal },
+        parseCampaigns,
+      ),
+      requestApi(
+        "/api/templates",
+        { method: "GET", signal: controller.signal },
+        parseTemplateOptions,
+      ),
+    ])
+      .then(([campaignRows, templateRows]) => {
+        setCampaigns(campaignRows);
+        setTemplates(templateRows);
+      })
+      .catch((loadFailure: unknown) => {
+        if (loadFailure instanceof DOMException && loadFailure.name === "AbortError") {
+          return;
+        }
+
+        if (loadFailure instanceof ApiRequestError && loadFailure.status === 401) {
+          handleUnauthorized();
+          return;
+        }
+
+        setLoadError(
+          loadFailure instanceof Error ? loadFailure.message : "Unable to load campaigns.",
+        );
+      })
+      .finally(() => setIsLoading(false));
+
+    return () => controller.abort();
+  }, [handleUnauthorized]);
+
+  function resetForm() {
+    setEditingCampaign(null);
+    setName("");
+    setDeliveryPlan("draft");
+    setTemplateId("");
+    setSchedulePreset("custom");
+    setScheduleDate("");
+    setScheduleTime("");
+    setAudienceMode("all");
+    setTargetFilters("{}");
+    setActionError(null);
+  }
+
+  function startEditing(campaign: CampaignRow) {
+    const dateParts = toLocalDateParts(campaign.scheduled_at);
+
+    setEditingCampaign(campaign);
+    setName(campaign.name);
+    setDeliveryPlan(getDeliveryPlan(campaign.status));
+    setTemplateId(campaign.template_id?.toString() ?? "");
+    setSchedulePreset("custom");
+    setScheduleDate(dateParts.date);
+    setScheduleTime(dateParts.time);
+    setAudienceMode(hasAudienceFilters(campaign.target_filters) ? "saved" : "all");
+    setTargetFilters(JSON.stringify(campaign.target_filters, null, 2));
+    setActionError(null);
+    setSuccess(null);
+    setConfirmingDeleteId(null);
+  }
+
+  function handleDeliveryPlanChange(plan: DeliveryPlan) {
+    setDeliveryPlan(plan);
+    setActionError(null);
+
+    if (plan === "schedule" && !scheduleDate) {
+      const preset = getPresetDate("tomorrow-morning");
+      setSchedulePreset("tomorrow-morning");
+      setScheduleDate(preset.date);
+      setScheduleTime(preset.time);
+    }
+  }
+
+  function handleSchedulePresetChange(preset: SchedulePreset) {
+    setSchedulePreset(preset);
+
+    if (preset === "custom") {
+      return;
+    }
+
+    const presetDate = getPresetDate(preset);
+    setScheduleDate(presetDate.date);
+    setScheduleTime(presetDate.time);
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setActionError(null);
+    setSuccess(null);
+
+    const trimmedName = name.trim();
+
+    if (!trimmedName) {
+      setActionError("Campaign name is required.");
+      return;
+    }
+
+    if (deliveryPlan === "schedule" && !scheduleDate) {
+      setActionError("Choose a delivery date before scheduling this campaign.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    const editingId = editingCampaign?.id;
+
+    try {
+      const filters = audienceMode === "all" ? {} : parseTargetFilters(targetFilters);
+      const scheduledAt =
+        deliveryPlan === "schedule" ? buildScheduledAt(scheduleDate, scheduleTime) : null;
+
+      if (deliveryPlan === "schedule" && !scheduledAt) {
+        throw new Error("Schedule must be a valid date and time.");
+      }
+
+      const savedCampaign = await requestApi(
+        editingId ? `/api/campaigns/${editingId}` : "/api/campaigns",
+        {
+          method: editingId ? "PUT" : "POST",
+          body: JSON.stringify({
+            name: trimmedName,
+            status: getCampaignStatus(deliveryPlan),
+            template_id: templateId ? Number(templateId) : null,
+            scheduled_at: scheduledAt,
+            target_filters: filters,
+          }),
+        },
+        parseCampaign,
+      );
+
+      setCampaigns((current) =>
+        editingId
+          ? current.map((campaign) =>
+              campaign.id === savedCampaign.id ? savedCampaign : campaign,
+            )
+          : [savedCampaign, ...current],
+      );
+      setSuccess(
+        editingId ? "Campaign updated successfully." : "Campaign created successfully.",
+      );
+      resetForm();
+    } catch (saveError) {
+      if (saveError instanceof ApiRequestError && saveError.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
+      setActionError(
+        saveError instanceof Error ? saveError.message : "Unable to save campaign.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleDeleteConfirmed(campaign: CampaignRow) {
+    setActionError(null);
+    setSuccess(null);
+    setDeletingId(campaign.id);
+
+    try {
+      await requestApi(`/api/campaigns/${campaign.id}`, { method: "DELETE" }, parseCampaign);
+      setCampaigns((current) => current.filter((item) => item.id !== campaign.id));
+      if (editingCampaign?.id === campaign.id) {
+        resetForm();
+      }
+      setSuccess("Campaign deleted successfully.");
+      setConfirmingDeleteId(null);
+    } catch (deleteError) {
+      if (deleteError instanceof ApiRequestError && deleteError.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
+      setActionError(
+        deleteError instanceof Error ? deleteError.message : "Unable to delete campaign.",
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  function getTemplateName(id: number | null): string {
+    if (id === null) {
+      return "No template";
+    }
+
+    return templates.find((template) => template.id === id)?.name ?? "Template unavailable";
+  }
+
+  const hasSavedAudienceOption = hasStoredAudienceFilters(targetFilters);
+
+  return (
+    <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+      <article className="min-w-0 rounded-md border border-zinc-800 bg-zinc-900 p-4 shadow-sm xl:col-span-2">
+        <h2 className="text-lg font-semibold text-zinc-50">Workspace campaigns</h2>
+        <p className="mt-1 text-sm text-zinc-400">
+          Plan, schedule, and review campaigns for this workspace.
+        </p>
+        <div className="mt-4">
+          {isLoading ? <ResourceLoading label="Loading campaigns" /> : null}
+          {!isLoading && loadError ? (
+            <ResourceError
+              message={loadError}
+              onRetry={() => {
+                setLoadError(null);
+                setIsLoading(true);
+                void loadResources();
+              }}
+            />
+          ) : null}
+          {!isLoading && !loadError && campaigns.length === 0 ? (
+            <ResourceEmpty
+              description="Create a campaign draft or schedule one for delivery."
+              title="No campaigns found"
+            />
+          ) : null}
+          {!isLoading && !loadError && campaigns.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-full text-left text-sm">
+                <thead className="border-b border-zinc-800 text-xs font-medium uppercase tracking-wide text-zinc-500">
+                  <tr>
+                    <th className="py-3 pr-4">Campaign</th>
+                    <th className="py-3 pr-4">Delivery</th>
+                    <th className="py-3 pr-4">Schedule</th>
+                    <th className="py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800">
+                  {campaigns.map((campaign) => (
+                    <tr key={campaign.id}>
+                      <td className="py-4 pr-4">
+                        <p className="font-medium text-zinc-100">{campaign.name}</p>
+                        <p className="mt-1 text-sm text-zinc-500">
+                          {getTemplateName(campaign.template_id)}
+                        </p>
+                      </td>
+                      <td className="py-4 pr-4">
+                        <span
+                          className={`inline-flex rounded-md border px-2 py-1 text-xs font-medium ${statusClassName(campaign.status)}`}
+                        >
+                          {getStatusLabel(campaign.status)}
+                        </span>
+                      </td>
+                      <td className="py-4 pr-4 text-zinc-500">
+                        {campaign.scheduled_at
+                          ? formatApiDate(campaign.scheduled_at)
+                          : "Not scheduled"}
+                      </td>
+                      <td className="py-4">
+                        {confirmingDeleteId === campaign.id ? (
+                          <div className="flex flex-col items-end gap-2">
+                            <p className="text-right text-xs font-medium text-red-300">
+                              Delete this campaign?
+                            </p>
+                            <div className="flex justify-end gap-2">
+                              <button
+                                className="h-9 rounded-md border border-red-500/30 px-3 text-sm font-medium text-red-300 outline-none transition-colors hover:bg-red-500/10 focus-visible:ring-2 focus-visible:ring-red-400 disabled:border-zinc-800 disabled:text-zinc-600"
+                                disabled={deletingId === campaign.id}
+                                onClick={() => void handleDeleteConfirmed(campaign)}
+                                type="button"
+                              >
+                                {deletingId === campaign.id
+                                  ? "Deleting..."
+                                  : "Confirm delete"}
+                              </button>
+                              <button
+                                className="h-9 rounded-md border border-zinc-700 px-3 text-sm font-medium text-zinc-300 outline-none transition-colors hover:bg-zinc-800 focus-visible:ring-2 focus-visible:ring-indigo-400"
+                                disabled={deletingId === campaign.id}
+                                onClick={() => setConfirmingDeleteId(null)}
+                                type="button"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex justify-end gap-2">
+                            <button
+                              className="h-9 rounded-md border border-zinc-700 px-3 text-sm font-medium text-zinc-300 outline-none transition-colors hover:bg-zinc-800 hover:text-zinc-50 focus-visible:ring-2 focus-visible:ring-indigo-400 disabled:cursor-not-allowed disabled:border-zinc-800 disabled:text-zinc-600 disabled:hover:bg-transparent"
+                              disabled={
+                                campaign.status === "processing" || campaign.status === "sent"
+                              }
+                              onClick={() => startEditing(campaign)}
+                              title={
+                                campaign.status === "processing" || campaign.status === "sent"
+                                  ? "Processing and sent campaigns are read-only"
+                                  : undefined
+                              }
+                              type="button"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              className="h-9 rounded-md border border-red-500/30 px-3 text-sm font-medium text-red-300 outline-none transition-colors hover:bg-red-500/10 focus-visible:ring-2 focus-visible:ring-red-400"
+                              onClick={() => {
+                                setActionError(null);
+                                setSuccess(null);
+                                setConfirmingDeleteId(campaign.id);
+                              }}
+                              type="button"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
+      </article>
+
+      <aside className="min-w-0 rounded-md border border-zinc-800 bg-zinc-900 p-4 shadow-sm">
+        <h2 className="text-lg font-semibold text-zinc-50">
+          {editingCampaign ? "Edit campaign" : "Create campaign"}
+        </h2>
+        <p className="mt-1 text-sm text-zinc-400">
+          {editingCampaign
+            ? "Update the name, delivery plan, audience, or template."
+            : "Create a draft now, or schedule delivery for later."}
+        </p>
+        <form className="mt-4 space-y-4" noValidate onSubmit={handleSubmit}>
+          <CampaignTextInput label="Name" onChange={setName} required value={name} />
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-zinc-200" htmlFor="campaign-template">
+              Template
+            </label>
+            <select
+              className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-50 outline-none transition-colors hover:border-zinc-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30"
+              id="campaign-template"
+              onChange={(event) => setTemplateId(event.target.value)}
+              value={templateId}
+            >
+              <option value="">No template</option>
+              {templates.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-zinc-200" htmlFor="campaign-plan">
+              Delivery plan
+            </label>
+            <select
+              className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-50 outline-none transition-colors hover:border-zinc-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30"
+              id="campaign-plan"
+              onChange={(event) =>
+                handleDeliveryPlanChange(event.target.value as DeliveryPlan)
+              }
+              value={deliveryPlan}
+            >
+              <option value="draft">Save as draft</option>
+              <option value="schedule">Schedule delivery</option>
+            </select>
+            <p className="text-xs text-zinc-500">
+              Drafts stay inactive. Scheduled campaigns run when their delivery time
+              arrives.
+            </p>
+          </div>
+          {deliveryPlan === "schedule" ? (
+            <div className="space-y-3 rounded-md border border-zinc-800 bg-zinc-950 p-3">
+              <div className="space-y-2">
+                <label
+                  className="text-sm font-medium text-zinc-200"
+                  htmlFor="campaign-schedule-preset"
+                >
+                  Schedule shortcut
+                </label>
+                <select
+                  className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-50 outline-none transition-colors hover:border-zinc-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30"
+                  id="campaign-schedule-preset"
+                  onChange={(event) =>
+                    handleSchedulePresetChange(event.target.value as SchedulePreset)
+                  }
+                  value={schedulePreset}
+                >
+                  <option value="tomorrow-morning">Tomorrow morning</option>
+                  <option value="tomorrow-afternoon">Tomorrow afternoon</option>
+                  <option value="next-week-morning">Next week morning</option>
+                  <option value="custom">Custom date and time</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label
+                    className="text-sm font-medium text-zinc-200"
+                    htmlFor="campaign-schedule-date"
+                  >
+                    Delivery date
+                  </label>
+                  <input
+                    className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-50 outline-none transition-colors hover:border-zinc-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30"
+                    id="campaign-schedule-date"
+                    onChange={(event) => {
+                      setScheduleDate(event.target.value);
+                      setSchedulePreset("custom");
+                    }}
+                    type="date"
+                    value={scheduleDate}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label
+                    className="text-sm font-medium text-zinc-200"
+                    htmlFor="campaign-schedule-time"
+                  >
+                    Delivery time
+                  </label>
+                  <input
+                    className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-50 outline-none transition-colors hover:border-zinc-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30"
+                    id="campaign-schedule-time"
+                    onChange={(event) => {
+                      setScheduleTime(event.target.value);
+                      setSchedulePreset("custom");
+                    }}
+                    type="time"
+                    value={scheduleTime}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : null}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-zinc-200" htmlFor="campaign-audience">
+              Audience
+            </label>
+            <select
+              className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-50 outline-none transition-colors hover:border-zinc-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30"
+              id="campaign-audience"
+              onChange={(event) => setAudienceMode(event.target.value as AudienceMode)}
+              value={audienceMode}
+            >
+              <option value="all">All contacts in this workspace</option>
+              {hasSavedAudienceOption ? (
+                <option value="saved">Saved custom audience</option>
+              ) : null}
+            </select>
+            <p className="text-xs text-zinc-500">
+              AI audience builder is coming next. For now, new campaigns target all
+              real contacts in this workspace.
+            </p>
+          </div>
+          {actionError ? (
+            <p className="text-sm text-red-300" role="alert">
+              {actionError}
+            </p>
+          ) : null}
+          {success ? (
+            <p aria-live="polite" className="text-sm text-emerald-300">
+              {success}
+            </p>
+          ) : null}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              className="h-10 flex-1 rounded-md bg-indigo-600 px-4 text-sm font-medium text-white outline-none transition-colors hover:bg-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-400 disabled:bg-zinc-800 disabled:text-zinc-500"
+              disabled={isSubmitting}
+              type="submit"
+            >
+              {isSubmitting
+                ? editingCampaign
+                  ? "Saving changes..."
+                  : "Creating campaign..."
+                : editingCampaign
+                  ? "Save changes"
+                  : deliveryPlan === "schedule"
+                    ? "Schedule campaign"
+                    : "Save campaign"}
+            </button>
+            {editingCampaign ? (
+              <button
+                className="h-10 rounded-md border border-zinc-700 px-4 text-sm font-medium text-zinc-300 outline-none transition-colors hover:bg-zinc-800 focus-visible:ring-2 focus-visible:ring-indigo-400"
+                onClick={resetForm}
+                type="button"
+              >
+                Cancel
+              </button>
+            ) : null}
+          </div>
+        </form>
+      </aside>
+    </section>
+  );
+}
+
+type CampaignTextInputProps = {
+  label: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+  value: string;
+};
+
+function CampaignTextInput({
+  label,
+  onChange,
+  required = false,
+  value,
+}: Readonly<CampaignTextInputProps>) {
+  return (
+    <div className="space-y-2">
+      <label className="text-sm font-medium text-zinc-200" htmlFor="campaign-name">
+        {label}
+      </label>
+      <input
+        className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-50 outline-none transition-colors hover:border-zinc-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30"
+        id="campaign-name"
+        onChange={(event) => onChange(event.target.value)}
+        required={required}
+        type="text"
+        value={value}
+      />
+    </div>
+  );
+}
