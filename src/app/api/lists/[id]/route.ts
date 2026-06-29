@@ -1,6 +1,7 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
 
 import { initializeDatabase, withWorkspace } from "@/lib/db";
+import { getWorkspaceIdFromHeaders } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,17 +27,6 @@ type UpdateListBody = {
   name?: unknown;
   description?: unknown;
 };
-
-function getWorkspaceId(request: NextRequest): number {
-  const headerValue = request.headers.get("x-workspace-id");
-  const workspaceId = headerValue ? Number(headerValue) : 1;
-
-  if (!Number.isInteger(workspaceId) || workspaceId <= 0) {
-    throw new Error("Invalid workspace id");
-  }
-
-  return workspaceId;
-}
 
 async function getListId({ params }: RouteParams): Promise<number> {
   const { id } = await params;
@@ -78,6 +68,7 @@ function parseUpdateListBody(body: UpdateListBody) {
 
 function statusForError(message: string): number {
   return [
+    "Missing workspace context",
     "Invalid workspace id",
     "Invalid list id",
     "Name must be a non-empty string",
@@ -92,7 +83,7 @@ export async function PUT(request: NextRequest, context: RouteParams) {
   try {
     await initializeDatabase();
 
-    const workspaceId = getWorkspaceId(request);
+    const workspaceId = getWorkspaceIdFromHeaders(request.headers);
     const listId = await getListId(context);
     const body = (await request.json()) as UpdateListBody;
     const list = parseUpdateListBody(body);
@@ -132,7 +123,7 @@ export async function DELETE(request: NextRequest, context: RouteParams) {
   try {
     await initializeDatabase();
 
-    const workspaceId = getWorkspaceId(request);
+    const workspaceId = getWorkspaceIdFromHeaders(request.headers);
     const listId = await getListId(context);
 
     const deletedList = await withWorkspace(workspaceId, async (client) => {

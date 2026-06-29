@@ -1,23 +1,31 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
 
+import {
+  parseCampaignTargetFilters,
+  type CampaignTargetFilters,
+} from "@/lib/campaign-filters";
+import {
+  assertCampaignSchedule,
+  assertUserCampaignIsEditable,
+  isCampaignStatus,
+  parseUserCampaignStatus,
+  type CampaignStatus,
+  type UserCampaignStatus,
+} from "@/lib/campaign-status";
 import { initializeDatabase, withWorkspace } from "@/lib/db";
+import { getWorkspaceIdFromHeaders } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const VALID_STATUSES = ["draft", "pending", "sent"] as const;
-
 const UPDATE_CAMPAIGN_SQL =
-  'UPDATE "Campaigns" SET ' +
-  "name = COALESCE($1, name), " +
-  "status = COALESCE($2, status), " +
-  "target_filters = COALESCE($3::jsonb, target_filters), " +
-  "scheduled_at = CASE WHEN $4::boolean THEN $5::timestamptz ELSE scheduled_at END, " +
-  "run_at = CASE WHEN $4::boolean THEN $5::timestamptz ELSE run_at END, " +
-  "template_id = CASE WHEN $6::boolean THEN $7::int ELSE template_id END, " +
+  'UPDATE "Campaigns" SET name = $1, status = $2, target_filters = $3::jsonb, ' +
+  "scheduled_at = $4::timestamptz, run_at = $4::timestamptz, template_id = $5::int, " +
   "updated_at = CURRENT_TIMESTAMP " +
-  "WHERE id = $8 AND workspace_id = $9 " +
+  "WHERE id = $6 AND workspace_id = $7 " +
   "RETURNING id, workspace_id, template_id, name, status, target_filters, scheduled_at, run_at, created_at, updated_at";
+const SELECT_CAMPAIGN_FOR_UPDATE_SQL =
+  'SELECT id, workspace_id, template_id, name, status, target_filters, scheduled_at, run_at, created_at, updated_at FROM "Campaigns" WHERE id = $1 AND workspace_id = $2 FOR UPDATE';
 const DELETE_CAMPAIGN_SQL =
   'DELETE FROM "Campaigns" WHERE id = $1 AND workspace_id = $2 RETURNING id, workspace_id, template_id, name, status, target_filters, scheduled_at, run_at, created_at, updated_at';
 
@@ -30,8 +38,8 @@ type CampaignRow = {
   workspace_id: number;
   template_id: number | null;
   name: string;
-  status: string;
-  target_filters: Record<string, unknown>;
+  status: CampaignStatus;
+  target_filters: CampaignTargetFilters;
   scheduled_at: Date | null;
   run_at: Date | null;
   created_at: Date;
@@ -45,17 +53,6 @@ type UpdateCampaignBody = {
   target_filters?: unknown;
   scheduled_at?: unknown;
 };
-
-function getWorkspaceId(request: NextRequest): number {
-  const headerValue = request.headers.get("x-workspace-id");
-  const workspaceId = headerValue ? Number(headerValue) : 1;
-
-  if (!Number.isInteger(workspaceId) || workspaceId <= 0) {
-    throw new Error("Invalid workspace id");
-  }
-
-  return workspaceId;
-}
 
 async function getCampaignId({ params }: RouteParams): Promise<number> {
   const { id } = await params;
@@ -80,34 +77,20 @@ function parseName(value: unknown): string | null {
   return value.trim();
 }
 
-function parseStatus(value: unknown): string | null {
+function parseStatus(value: unknown): UserCampaignStatus | null {
   if (value === undefined) {
     return null;
   }
 
-  if (typeof value !== "string") {
-    throw new Error("Invalid status");
-  }
-
-  const normalized = value.trim().toLowerCase();
-
-  if (!VALID_STATUSES.includes(normalized as (typeof VALID_STATUSES)[number])) {
-    throw new Error("Invalid status");
-  }
-
-  return normalized;
+  return parseUserCampaignStatus(value, "draft");
 }
 
-function parseTargetFilters(value: unknown): string | null {
+function parseTargetFilters(value: unknown): CampaignTargetFilters | null {
   if (value === undefined) {
     return null;
   }
 
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("target_filters must be a JSON object");
-  }
-
-  return JSON.stringify(value);
+  return parseCampaignTargetFilters(value);
 }
 
 function parseScheduledAt(value: unknown): { provided: boolean; value: string | null } {
@@ -150,17 +133,32 @@ function parseTemplateId(value: unknown): { provided: boolean; value: number | n
   return { provided: true, value: templateId };
 }
 
+function toIsoString(value: Date | null): string | null {
+  return value ? value.toISOString() : null;
+}
+
 function statusForError(message: string): number {
-  return [
+  const knownValidationError = [
+    "Missing workspace context",
     "Invalid workspace id",
     "Invalid campaign id",
     "Name must be a non-empty string",
     "Invalid status",
+    "Only draft or pending status can be set by users",
+    "Processing or sent campaigns cannot be edited",
     "target_filters must be a JSON object",
     "Invalid scheduled_at",
     "Invalid template id",
     "At least one field is required",
-  ].includes(message)
+    "Scheduled campaigns require a delivery time",
+  ].includes(message);
+  const filterValidationError =
+    message.startsWith("Unsupported filter") ||
+    message.endsWith("must be a finite number") ||
+    message.endsWith("must be a string or null") ||
+    message === "tags_contains must be a non-empty string";
+
+  return knownValidationError || filterValidationError
     ? 400
     : 500;
 }
@@ -169,7 +167,7 @@ export async function PUT(request: NextRequest, context: RouteParams) {
   try {
     await initializeDatabase();
 
-    const workspaceId = getWorkspaceId(request);
+    const workspaceId = getWorkspaceIdFromHeaders(request.headers);
     const campaignId = await getCampaignId(context);
     const body = (await request.json()) as UpdateCampaignBody;
 
@@ -190,6 +188,22 @@ export async function PUT(request: NextRequest, context: RouteParams) {
     }
 
     const updatedCampaign = await withWorkspace(workspaceId, async (client) => {
+      const currentResult = await client.query<CampaignRow>(
+        SELECT_CAMPAIGN_FOR_UPDATE_SQL,
+        [campaignId, workspaceId],
+      );
+      const currentCampaign = currentResult.rows[0];
+
+      if (!currentCampaign) {
+        return null;
+      }
+
+      if (!isCampaignStatus(currentCampaign.status)) {
+        throw new Error("Campaign has an unsupported stored status");
+      }
+
+      assertUserCampaignIsEditable(currentCampaign.status);
+
       if (templateId.provided && templateId.value !== null) {
         const templateCheck = await client.query(
           'SELECT 1 FROM "Templates" WHERE id = $1 AND workspace_id = $2',
@@ -201,14 +215,23 @@ export async function PUT(request: NextRequest, context: RouteParams) {
         }
       }
 
+      const nextStatus = status ?? currentCampaign.status;
+      const requestedSchedule = scheduledAt.provided
+        ? scheduledAt.value
+        : toIsoString(currentCampaign.scheduled_at);
+      const nextScheduledAt =
+        nextStatus === "draft" || nextStatus === "failed" ? null : requestedSchedule;
+
+      assertCampaignSchedule(nextStatus, nextScheduledAt);
+
       const result = await client.query<CampaignRow>(UPDATE_CAMPAIGN_SQL, [
-        name,
-        status,
-        targetFilters,
-        scheduledAt.provided,
-        scheduledAt.value,
-        templateId.provided,
-        templateId.value,
+        name ?? currentCampaign.name,
+        nextStatus,
+        JSON.stringify(
+          targetFilters ?? parseCampaignTargetFilters(currentCampaign.target_filters),
+        ),
+        nextScheduledAt,
+        templateId.provided ? templateId.value : currentCampaign.template_id,
         campaignId,
         workspaceId,
       ]);
@@ -244,7 +267,7 @@ export async function DELETE(request: NextRequest, context: RouteParams) {
   try {
     await initializeDatabase();
 
-    const workspaceId = getWorkspaceId(request);
+    const workspaceId = getWorkspaceIdFromHeaders(request.headers);
     const campaignId = await getCampaignId(context);
 
     const deletedCampaign = await withWorkspace(workspaceId, async (client) => {

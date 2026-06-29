@@ -1,6 +1,7 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
 
 import { initializeDatabase, withWorkspace } from "@/lib/db";
+import { getWorkspaceIdFromHeaders } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,17 +23,6 @@ type CreateListBody = {
   name?: unknown;
   description?: unknown;
 };
-
-function getWorkspaceId(request: NextRequest): number {
-  const headerValue = request.headers.get("x-workspace-id");
-  const workspaceId = headerValue ? Number(headerValue) : 1;
-
-  if (!Number.isInteger(workspaceId) || workspaceId <= 0) {
-    throw new Error("Invalid workspace id");
-  }
-
-  return workspaceId;
-}
 
 function asOptionalString(value: unknown): string | null {
   if (value === undefined || value === null) {
@@ -59,9 +49,12 @@ function parseCreateListBody(body: CreateListBody) {
 }
 
 function statusForError(message: string): number {
-  return ["Invalid workspace id", "Name is required", "Description must be a string"].includes(
-    message,
-  )
+  return [
+    "Missing workspace context",
+    "Invalid workspace id",
+    "Name is required",
+    "Description must be a string",
+  ].includes(message)
     ? 400
     : 500;
 }
@@ -70,7 +63,7 @@ export async function GET(request: NextRequest) {
   try {
     await initializeDatabase();
 
-    const workspaceId = getWorkspaceId(request);
+    const workspaceId = getWorkspaceIdFromHeaders(request.headers);
     const lists = await withWorkspace(workspaceId, async (client) => {
       const result = await client.query<ListRow>(SELECT_LISTS_SQL, [workspaceId]);
       return result.rows;
@@ -93,7 +86,7 @@ export async function POST(request: NextRequest) {
   try {
     await initializeDatabase();
 
-    const workspaceId = getWorkspaceId(request);
+    const workspaceId = getWorkspaceIdFromHeaders(request.headers);
     const body = (await request.json()) as CreateListBody;
     const list = parseCreateListBody(body);
 

@@ -1,11 +1,15 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
 
+import { parseCampaignTargetFilters } from "@/lib/campaign-filters";
+import {
+  assertCampaignSchedule,
+  parseUserCampaignStatus,
+} from "@/lib/campaign-status";
 import { initializeDatabase, withWorkspace } from "@/lib/db";
+import { getWorkspaceIdFromHeaders } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const VALID_STATUSES = ["draft", "pending", "sent"] as const;
 
 const SELECT_CAMPAIGNS_SQL =
   'SELECT id, workspace_id, template_id, name, status, target_filters, scheduled_at, run_at, created_at, updated_at FROM "Campaigns" WHERE workspace_id = $1 ORDER BY created_at DESC, id DESC';
@@ -36,17 +40,6 @@ type CreateCampaignBody = {
   scheduled_at?: unknown;
 };
 
-function getWorkspaceId(request: NextRequest): number {
-  const headerValue = request.headers.get("x-workspace-id");
-  const workspaceId = headerValue ? Number(headerValue) : 1;
-
-  if (!Number.isInteger(workspaceId) || workspaceId <= 0) {
-    throw new Error("Invalid workspace id");
-  }
-
-  return workspaceId;
-}
-
 function parseOptionalTemplateId(value: unknown): number | null {
   if (value === undefined || value === null) {
     return null;
@@ -59,34 +52,6 @@ function parseOptionalTemplateId(value: unknown): number | null {
   }
 
   return templateId;
-}
-
-function parseStatus(value: unknown): string {
-  if (value === undefined || value === null) {
-    return "draft";
-  }
-
-  if (typeof value !== "string") {
-    throw new Error("Invalid status");
-  }
-
-  const normalized = value.trim().toLowerCase();
-
-  if (!VALID_STATUSES.includes(normalized as (typeof VALID_STATUSES)[number])) {
-    throw new Error("Invalid status");
-  }
-
-  return normalized;
-}
-
-function parseTargetFilters(value: unknown): Record<string, unknown> {
-  const filters = value ?? {};
-
-  if (typeof filters !== "object" || filters === null || Array.isArray(filters)) {
-    throw new Error("target_filters must be a JSON object");
-  }
-
-  return filters as Record<string, unknown>;
 }
 
 function parseScheduledAt(value: unknown): string | null {
@@ -112,24 +77,38 @@ function parseCreateCampaignBody(body: CreateCampaignBody) {
     throw new Error("Name is required");
   }
 
+  const status = parseUserCampaignStatus(body.status, "draft");
+  const scheduledAt = parseScheduledAt(body.scheduled_at);
+  assertCampaignSchedule(status, scheduledAt);
+
   return {
     name: body.name.trim(),
     templateId: parseOptionalTemplateId(body.template_id),
-    status: parseStatus(body.status),
-    targetFilters: parseTargetFilters(body.target_filters),
-    scheduledAt: parseScheduledAt(body.scheduled_at),
+    status,
+    targetFilters: parseCampaignTargetFilters(body.target_filters),
+    scheduledAt: status === "pending" ? scheduledAt : null,
   };
 }
 
 function statusForError(message: string): number {
-  return [
+  const knownValidationError = [
+    "Missing workspace context",
     "Invalid workspace id",
     "Name is required",
     "Invalid template id",
     "Invalid status",
+    "Only draft or pending status can be set by users",
     "target_filters must be a JSON object",
     "Invalid scheduled_at",
-  ].includes(message)
+    "Scheduled campaigns require a delivery time",
+  ].includes(message);
+  const filterValidationError =
+    message.startsWith("Unsupported filter") ||
+    message.endsWith("must be a finite number") ||
+    message.endsWith("must be a string or null") ||
+    message === "tags_contains must be a non-empty string";
+
+  return knownValidationError || filterValidationError
     ? 400
     : 500;
 }
@@ -138,7 +117,7 @@ export async function GET(request: NextRequest) {
   try {
     await initializeDatabase();
 
-    const workspaceId = getWorkspaceId(request);
+    const workspaceId = getWorkspaceIdFromHeaders(request.headers);
     const campaigns = await withWorkspace(workspaceId, async (client) => {
       const result = await client.query<CampaignRow>(SELECT_CAMPAIGNS_SQL, [workspaceId]);
       return result.rows;
@@ -161,7 +140,7 @@ export async function POST(request: NextRequest) {
   try {
     await initializeDatabase();
 
-    const workspaceId = getWorkspaceId(request);
+    const workspaceId = getWorkspaceIdFromHeaders(request.headers);
     const body = (await request.json()) as CreateCampaignBody;
     const campaign = parseCreateCampaignBody(body);
 
