@@ -4,7 +4,8 @@ import type { ReactNode } from "react";
 
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { BackToTop } from "@/components/homepage/back-to-top";
-import { Hero3DVisual } from "@/components/homepage/hero-3d-visual";
+import { Background3D } from "@/components/homepage/background-3d";
+import { HeroStage } from "@/components/homepage/hero-stage";
 
 export const metadata: Metadata = {
   title: "Marekto — AI-powered marketing automation",
@@ -297,17 +298,6 @@ const securityPoints: ReadonlyArray<{
   },
 ];
 
-const heroFlowCards: ReadonlyArray<{
-  label: string;
-  caption: string;
-  icon: (props: IconProps) => ReactNode;
-}> = [
-  { label: "Contacts", caption: "Ingested records", icon: ContactsIcon },
-  { label: "AI scoring", caption: "Validated lead score", icon: ScoreIcon },
-  { label: "Segmentation", caption: "Plain-language filter", icon: SegmentIcon },
-  { label: "Campaign", caption: "Scheduled run-at", icon: CampaignIcon },
-  { label: "Personalized email", caption: "Per-contact content", icon: MailIcon },
-];
 
 function Navbar() {
   return (
@@ -410,181 +400,12 @@ function Hero() {
           </p>
         </div>
 
-        <div className="marekto-fade-up rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 shadow-2xl shadow-indigo-950/30 sm:p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span
-                aria-hidden="true"
-                className="h-2 w-2 rounded-full bg-cyan-400"
-              />
-              <p className="text-sm font-medium text-zinc-200">
-                AI Lead Journey Engine
-              </p>
-            </div>
-            <span className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1 text-xs font-medium text-zinc-500">
-              Conceptual
-            </span>
-          </div>
-
-          <div className="marekto-hero-stage relative mt-4 aspect-[5/4] w-full overflow-hidden rounded-xl border border-zinc-800/80">
-            <Hero3DVisual>
-              <HeroFallbackVisual />
-            </Hero3DVisual>
-          </div>
-
-          <ul className="mt-4 flex flex-wrap gap-2">
-            {heroFlowCards.map((card) => {
-              const Icon = card.icon;
-
-              return (
-                <li
-                  className="inline-flex items-center gap-1.5 rounded-full border border-zinc-800 bg-zinc-950/70 px-3 py-1 text-xs font-medium text-zinc-300"
-                  key={card.label}
-                >
-                  <Icon className="h-3.5 w-3.5 text-indigo-300" />
-                  {card.label}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+        <HeroStage />
       </div>
     </section>
   );
 }
 
-function HeroFallbackVisual() {
-  return (
-    <svg
-      aria-label="Conceptual Marekto lead journey: contacts stream down an AI segmentation funnel into a delivery core that sends personalized email."
-      className="h-full w-full"
-      preserveAspectRatio="xMidYMid meet"
-      role="img"
-      viewBox="0 0 400 320"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <defs>
-        <linearGradient id="funnelStroke" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#6366f1" />
-          <stop offset="55%" stopColor="#3b82f6" />
-          <stop offset="100%" stopColor="#22d3ee" />
-        </linearGradient>
-        <radialGradient id="coreGlow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#a5f3fc" stopOpacity="0.9" />
-          <stop offset="100%" stopColor="#22d3ee" stopOpacity="0" />
-        </radialGradient>
-        <radialGradient id="nodeGlow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#2dd4bf" stopOpacity="0.8" />
-          <stop offset="100%" stopColor="#2dd4bf" stopOpacity="0" />
-        </radialGradient>
-      </defs>
-
-      {/* Funnel walls */}
-      <path
-        d="M58 74 L188 250"
-        stroke="url(#funnelStroke)"
-        strokeWidth="1"
-        opacity="0.3"
-        fill="none"
-      />
-      <path
-        d="M342 74 L212 250"
-        stroke="url(#funnelStroke)"
-        strokeWidth="1"
-        opacity="0.3"
-        fill="none"
-      />
-
-      {/* Stacked perspective rings (segmentation funnel) */}
-      {[
-        { y: 74, rx: 142, o: 0.45 },
-        { y: 98, rx: 120, o: 0.42 },
-        { y: 122, rx: 99, o: 0.39 },
-        { y: 148, rx: 79, o: 0.36 },
-        { y: 174, rx: 60, o: 0.33 },
-        { y: 200, rx: 43, o: 0.3 },
-        { y: 226, rx: 27, o: 0.27 },
-        { y: 248, rx: 14, o: 0.24 },
-      ].map((ring) => (
-        <ellipse
-          key={ring.y}
-          cx="200"
-          cy={ring.y}
-          rx={ring.rx}
-          ry={ring.rx * 0.3}
-          fill="none"
-          stroke="url(#funnelStroke)"
-          strokeWidth="1.5"
-          opacity={ring.o}
-        />
-      ))}
-
-      {/* Orbiting AI nodes with beams to the core */}
-      {[
-        { x: 96, y: 120 },
-        { x: 320, y: 150 },
-        { x: 128, y: 206 },
-        { x: 296, y: 210 },
-      ].map((node) => (
-        <g key={`${node.x}-${node.y}`}>
-          <line
-            x1={node.x}
-            y1={node.y}
-            x2="200"
-            y2="250"
-            stroke="#3b82f6"
-            strokeWidth="1"
-            opacity="0.22"
-          />
-          <circle cx={node.x} cy={node.y} r="14" fill="url(#nodeGlow)" />
-          <circle cx={node.x} cy={node.y} r="3.5" fill="#2dd4bf" />
-        </g>
-      ))}
-
-      {/* Lead particles streaming down the funnel */}
-      {[
-        { x: 150, y: 96 },
-        { x: 250, y: 110 },
-        { x: 176, y: 150 },
-        { x: 232, y: 168 },
-        { x: 196, y: 200 },
-        { x: 210, y: 224 },
-      ].map((dot) => (
-        <circle
-          key={`${dot.x}-${dot.y}`}
-          cx={dot.x}
-          cy={dot.y}
-          r="2.4"
-          fill="#818cf8"
-          opacity="0.85"
-        />
-      ))}
-
-      {/* Converging delivery core */}
-      <circle cx="200" cy="250" r="26" fill="url(#coreGlow)" />
-      <circle cx="200" cy="250" r="5" fill="#a5f3fc" />
-
-      {/* Delivery arc + envelope (personalized email) */}
-      <path
-        d="M200 250 Q270 196 320 244"
-        stroke="#22d3ee"
-        strokeWidth="1.5"
-        opacity="0.45"
-        fill="none"
-      />
-      <g
-        stroke="#2dd4bf"
-        strokeWidth="1.5"
-        fill="none"
-        opacity="0.85"
-        strokeLinejoin="round"
-      >
-        <rect x="296" y="232" width="48" height="32" rx="3" />
-        <path d="M296 234 L320 252 L344 234" />
-      </g>
-    </svg>
-  );
-}
 
 function SectionHeading({
   eyebrow,
@@ -779,7 +600,6 @@ const footerProductLinks: ReadonlyArray<{ href: string; label: string }> = [
 const footerAppLinks: ReadonlyArray<{ href: string; label: string }> = [
   { href: "/login", label: "Login" },
   { href: "/register", label: "Register" },
-  { href: "/dashboard", label: "Dashboard" },
 ];
 
 const footerPlatformSummary: ReadonlyArray<string> = [
@@ -901,17 +721,20 @@ function Footer() {
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen overflow-x-hidden bg-zinc-950 text-zinc-50">
-      <Navbar />
-      <main>
-        <Hero />
-        <FlowSection />
-        <FeaturesSection />
-        <SecuritySection />
-        <FinalCta />
-      </main>
-      <Footer />
-      <BackToTop />
+    <div className="relative min-h-screen overflow-x-hidden text-zinc-50">
+      <Background3D />
+      <div className="relative z-10 flex min-h-screen flex-col">
+        <Navbar />
+        <main className="flex-1">
+          <Hero />
+          <FlowSection />
+          <FeaturesSection />
+          <SecuritySection />
+          <FinalCta />
+        </main>
+        <Footer />
+        <BackToTop />
+      </div>
     </div>
   );
 }

@@ -12,7 +12,7 @@
 const REQUIRED_ENV_VARS = ["DATABASE_URL"] as const;
 const INITIALIZATION_TIMEOUT_MS = 60_000;
 const SLOW_QUERY_THRESHOLD_MS = 1_000;
-const MIGRATION_VERSION = "v4_tenant_isolation_phase_repair";
+const MIGRATION_VERSION = "v6_user_profile_fields";
 
 type SafeDatabaseConfig = {
   source: "DATABASE_URL";
@@ -212,6 +212,9 @@ CREATE TABLE IF NOT EXISTS "Users" (
   email VARCHAR UNIQUE NOT NULL,
   password_hash VARCHAR NOT NULL,
   role VARCHAR NOT NULL,
+  first_name VARCHAR,
+  last_name VARCHAR,
+  phone VARCHAR,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -229,6 +232,17 @@ CREATE TABLE IF NOT EXISTS "Workspace_members" (
   role VARCHAR NOT NULL,
   joined_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (workspace_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS "Registration_otps" (
+  email VARCHAR PRIMARY KEY,
+  password_hash VARCHAR NOT NULL,
+  workspace_name VARCHAR NOT NULL,
+  otp_hash VARCHAR NOT NULL,
+  attempts INT NOT NULL DEFAULT 0,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS "Contacts" (
@@ -301,6 +315,7 @@ CREATE TABLE IF NOT EXISTS "Email_logs" (
 CREATE INDEX IF NOT EXISTS idx_workspaces_owner_id ON "Workspaces"(owner_id);
 CREATE INDEX IF NOT EXISTS idx_workspace_members_workspace_id ON "Workspace_members"(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_workspace_members_user_id ON "Workspace_members"(user_id);
+CREATE INDEX IF NOT EXISTS idx_registration_otps_expires_at ON "Registration_otps"(expires_at);
 CREATE INDEX IF NOT EXISTS idx_contacts_workspace_id ON "Contacts"(workspace_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_workspace_email_unique ON "Contacts"(workspace_id, email);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_workspace_id_id_unique ON "Contacts"(workspace_id, id);
@@ -316,6 +331,10 @@ CREATE INDEX IF NOT EXISTS idx_email_logs_campaign_id ON "Email_logs"(campaign_i
 CREATE INDEX IF NOT EXISTS idx_email_logs_contact_id ON "Email_logs"(contact_id);
 CREATE INDEX IF NOT EXISTS idx_contacts_properties_gin ON "Contacts" USING GIN (properties);
 CREATE INDEX IF NOT EXISTS idx_campaigns_target_filters_gin ON "Campaigns" USING GIN (target_filters);
+
+ALTER TABLE "Users" ADD COLUMN IF NOT EXISTS first_name VARCHAR;
+ALTER TABLE "Users" ADD COLUMN IF NOT EXISTS last_name VARCHAR;
+ALTER TABLE "Users" ADD COLUMN IF NOT EXISTS phone VARCHAR;
 
 ALTER TABLE "Contacts" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Contacts" FORCE ROW LEVEL SECURITY;

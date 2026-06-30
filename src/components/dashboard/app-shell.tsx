@@ -2,13 +2,15 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { SignOutButton } from "@/components/auth/sign-out-button";
+import { NavLink } from "@/components/dashboard/nav-link";
 
 export type AppRoute =
   | "/dashboard"
   | "/contacts"
   | "/lists"
   | "/campaigns"
-  | "/templates";
+  | "/templates"
+  | "/profile";
 
 type AppShellProps = {
   activeRoute: AppRoute;
@@ -25,10 +27,10 @@ const navigationItems: ReadonlyArray<{ href: AppRoute; label: string }> = [
   { href: "/lists", label: "Lists" },
   { href: "/campaigns", label: "Campaigns" },
   { href: "/templates", label: "Templates" },
+  { href: "/profile", label: "Profile" },
 ];
 
 export function AppShell({
-  activeRoute,
   authenticated,
   children,
   eyebrow,
@@ -63,21 +65,12 @@ export function AppShell({
             className="mt-6 flex flex-wrap gap-2 lg:flex-col"
           >
             {navigationItems.map((item) => {
-              const isActive = item.href === activeRoute;
-
               return (
-                <Link
-                  aria-current={isActive ? "page" : undefined}
-                  className={
-                    isActive
-                      ? "flex items-center rounded-md border border-indigo-500/30 bg-indigo-600 px-3 py-2 text-sm font-medium text-white outline-none transition-colors hover:bg-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-400"
-                      : "flex items-center rounded-md border border-transparent px-3 py-2 text-sm font-medium text-zinc-400 outline-none transition-colors hover:bg-zinc-900 hover:text-zinc-50 focus-visible:ring-2 focus-visible:ring-indigo-400"
-                  }
+                <NavLink
                   href={item.href}
                   key={item.href}
-                >
-                  {item.label}
-                </Link>
+                  label={item.label}
+                />
               );
             })}
             <div

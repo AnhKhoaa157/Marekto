@@ -9,6 +9,7 @@ type Hero3DVisualProps = Readonly<{
    * mounting the canvas never shifts the page.
    */
   children: ReactNode;
+  activeSection?: string | null;
 }>;
 
 type ThreeModule = typeof import("three");
@@ -60,21 +61,22 @@ function createGlowTexture(THREE: ThreeModule) {
 }
 
 /**
- * "Marekto AI Lead Journey Engine" — a lightweight, conceptual 3D scene:
- * contacts stream as glowing particles down a layered segmentation funnel,
- * AI/network nodes orbit and beam into the core, and a delivery arc carries a
- * pulse out to an envelope (personalized email). It is decorative only; it
- * encodes no business data, counts, or records.
- *
- * Performance: `three` is dynamically imported inside the effect (code-split,
- * never blocking first paint / SSR). The render loop pauses offscreen and when
- * the tab is hidden, the pixel ratio is capped, geometry/materials/texture are
- * disposed on unmount, and reduced-motion / missing-WebGL keep the static
- * `children` fallback.
+ * "Marekto AI Lead Journey Engine" — an enhanced 3D visual component.
+ * Features:
+ * - Parallax camera movement and group tilt relative to user's mouse position.
+ * - Reactive highlighting of components synced to the hovered state from parent.
+ * - Dual-particle system representing ambient contacts and active qualified leads.
+ * - Premium semi-transparent 3D envelope structure.
  */
-export function Hero3DVisual({ children }: Hero3DVisualProps) {
+export function Hero3DVisual({ children, activeSection }: Hero3DVisualProps) {
   const layerRef = useRef<HTMLDivElement | null>(null);
   const [active, setActive] = useState(false);
+  const activeSectionRef = useRef<string | null>(null);
+
+  // Bind activeSection to a ref to let the WebGL render loop consume it without hot-rebuilding the scene
+  useEffect(() => {
+    activeSectionRef.current = activeSection ?? null;
+  }, [activeSection]);
 
   useEffect(() => {
     const layer = layerRef.current;
@@ -124,28 +126,31 @@ export function Hero3DVisual({ children }: Hero3DVisualProps) {
         group.rotation.x = 0.34;
         scene.add(group);
 
-        // Track every disposable so unmount fully releases GPU memory.
         const disposables: Array<{ dispose: () => void }> = [];
         const glowTexture = createGlowTexture(THREE);
         disposables.push(glowTexture);
 
-        // Brand palette.
+        // Brand colors
         const indigo = new THREE.Color("#6366f1");
         const blue = new THREE.Color("#3b82f6");
         const cyan = new THREE.Color("#22d3ee");
         const teal = new THREE.Color("#2dd4bf");
 
-        // Funnel geometry parameters (oriented along the Y axis).
+        // Funnel boundaries
         const TOP_Y = 2.7;
         const BOTTOM_Y = -2.3;
         const TOP_RADIUS = 2.5;
         const BOTTOM_RADIUS = 0.24;
         const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
-        // 1) Layered segmentation funnel: stacked perspective rings, colour
-        //    graded indigo -> blue -> cyan from intake to output.
+        // 1) Funnel rings
         const ringCount = 9;
         const ringSegments = 72;
+        const ringsList: Array<{
+          line: import("three").LineLoop;
+          defaultOpacity: number;
+        }> = [];
+
         for (let r = 0; r < ringCount; r += 1) {
           const t = r / (ringCount - 1);
           const y = lerp(TOP_Y, BOTTOM_Y, t);
@@ -163,17 +168,19 @@ export function Hero3DVisual({ children }: Hero3DVisualProps) {
             new THREE.BufferAttribute(ringPositions, 3),
           );
           const ringColor = indigo.clone().lerp(cyan, t);
+          const defaultOpacity = 0.18 + (1 - t) * 0.22;
           const ringMaterial = new THREE.LineBasicMaterial({
             color: ringColor,
-            opacity: 0.18 + (1 - t) * 0.22,
+            opacity: defaultOpacity,
             transparent: true,
           });
           const ring = new THREE.LineLoop(ringGeometry, ringMaterial);
           group.add(ring);
+          ringsList.push({ line: ring, defaultOpacity });
           disposables.push(ringGeometry, ringMaterial);
         }
 
-        // Faint outer halo ring for depth/framing.
+        // Faint framing halo
         const haloSegments = 96;
         const haloPositions = new Float32Array((haloSegments + 1) * 3);
         for (let s = 0; s <= haloSegments; s += 1) {
@@ -196,66 +203,111 @@ export function Hero3DVisual({ children }: Hero3DVisualProps) {
         group.add(halo);
         disposables.push(haloGeometry, haloMaterial);
 
-        // 2) Lead particles streaming down the funnel.
-        const leadCount = 220;
-        const leadPositions = new Float32Array(leadCount * 3);
-        const leadColors = new Float32Array(leadCount * 3);
-        const leadProgress = new Float32Array(leadCount);
-        const leadAngle = new Float32Array(leadCount);
-        const leadRadiusFactor = new Float32Array(leadCount);
-        const leadSpeed = new Float32Array(leadCount);
+        // 2) Dual particle system: Ambient (slow background records) + Active (AI qualified leads)
         const TWIST = 2.4;
         const tmpColor = new THREE.Color();
 
-        const placeLead = (i: number) => {
-          const p = leadProgress[i];
-          const y = lerp(TOP_Y, BOTTOM_Y, p);
-          const ringRadius = lerp(TOP_RADIUS, BOTTOM_RADIUS, p);
-          const radius = ringRadius * leadRadiusFactor[i];
-          const angle = leadAngle[i] + p * TWIST;
-          leadPositions[i * 3] = Math.cos(angle) * radius;
-          leadPositions[i * 3 + 1] = y;
-          leadPositions[i * 3 + 2] = Math.sin(angle) * radius;
+        // System A: Ambient Leads (dimmer, smaller, slower)
+        const ambientCount = 140;
+        const ambientPositions = new Float32Array(ambientCount * 3);
+        const ambientColors = new Float32Array(ambientCount * 3);
+        const ambientProgress = new Float32Array(ambientCount);
+        const ambientAngle = new Float32Array(ambientCount);
+        const ambientRadiusFactor = new Float32Array(ambientCount);
+        const ambientSpeed = new Float32Array(ambientCount);
+
+        // System B: Active Leads (brighter, larger, faster)
+        const activeCount = 80;
+        const activePositions = new Float32Array(activeCount * 3);
+        const activeColors = new Float32Array(activeCount * 3);
+        const activeProgress = new Float32Array(activeCount);
+        const activeAngle = new Float32Array(activeCount);
+        const activeRadiusFactor = new Float32Array(activeCount);
+        const activeSpeed = new Float32Array(activeCount);
+
+        const placeLead = (
+          positions: Float32Array,
+          progress: number,
+          angle: number,
+          radiusFactor: number,
+          index: number,
+        ) => {
+          const y = lerp(TOP_Y, BOTTOM_Y, progress);
+          const ringRadius = lerp(TOP_RADIUS, BOTTOM_RADIUS, progress);
+          const radius = ringRadius * radiusFactor;
+          const currentAngle = angle + progress * TWIST;
+          positions[index * 3] = Math.cos(currentAngle) * radius;
+          positions[index * 3 + 1] = y;
+          positions[index * 3 + 2] = Math.sin(currentAngle) * radius;
         };
 
-        for (let i = 0; i < leadCount; i += 1) {
-          leadProgress[i] = Math.random();
-          leadAngle[i] = Math.random() * Math.PI * 2;
-          leadRadiusFactor[i] = 0.82 + Math.random() * 0.26;
-          leadSpeed[i] = 0.05 + Math.random() * 0.09;
-          placeLead(i);
-          tmpColor.copy(indigo).lerp(cyan, Math.random());
-          leadColors[i * 3] = tmpColor.r;
-          leadColors[i * 3 + 1] = tmpColor.g;
-          leadColors[i * 3 + 2] = tmpColor.b;
+        // Initialize Ambient Leads
+        for (let i = 0; i < ambientCount; i += 1) {
+          ambientProgress[i] = Math.random();
+          ambientAngle[i] = Math.random() * Math.PI * 2;
+          ambientRadiusFactor[i] = 0.85 + Math.random() * 0.2;
+          ambientSpeed[i] = 0.03 + Math.random() * 0.04;
+          placeLead(ambientPositions, ambientProgress[i], ambientAngle[i], ambientRadiusFactor[i], i);
+          
+          tmpColor.copy(indigo).lerp(blue, Math.random() * 0.6);
+          ambientColors[i * 3] = tmpColor.r;
+          ambientColors[i * 3 + 1] = tmpColor.g;
+          ambientColors[i * 3 + 2] = tmpColor.b;
         }
 
-        const leadGeometry = new THREE.BufferGeometry();
-        const leadPositionAttribute = new THREE.BufferAttribute(
-          leadPositions,
-          3,
-        );
-        leadPositionAttribute.setUsage(THREE.DynamicDrawUsage);
-        leadGeometry.setAttribute("position", leadPositionAttribute);
-        leadGeometry.setAttribute(
-          "color",
-          new THREE.BufferAttribute(leadColors, 3),
-        );
-        const leadMaterial = new THREE.PointsMaterial({
+        const ambientGeometry = new THREE.BufferGeometry();
+        const ambientPositionAttribute = new THREE.BufferAttribute(ambientPositions, 3);
+        ambientPositionAttribute.setUsage(THREE.DynamicDrawUsage);
+        ambientGeometry.setAttribute("position", ambientPositionAttribute);
+        ambientGeometry.setAttribute("color", new THREE.BufferAttribute(ambientColors, 3));
+        const ambientMaterial = new THREE.PointsMaterial({
           blending: THREE.AdditiveBlending,
           depthWrite: false,
           map: glowTexture,
-          opacity: 0.92,
-          size: 0.16,
+          opacity: 0.6,
+          size: 0.08,
           sizeAttenuation: true,
           transparent: true,
           vertexColors: true,
         });
-        const leads = new THREE.Points(leadGeometry, leadMaterial);
-        group.add(leads);
-        disposables.push(leadGeometry, leadMaterial);
+        const ambientLeads = new THREE.Points(ambientGeometry, ambientMaterial);
+        group.add(ambientLeads);
+        disposables.push(ambientGeometry, ambientMaterial);
 
-        // Bright converging core at the funnel output.
+        // Initialize Active Leads
+        for (let i = 0; i < activeCount; i += 1) {
+          activeProgress[i] = Math.random();
+          activeAngle[i] = Math.random() * Math.PI * 2;
+          activeRadiusFactor[i] = 0.4 + Math.random() * 0.45; // slightly centered
+          activeSpeed[i] = 0.08 + Math.random() * 0.08;
+          placeLead(activePositions, activeProgress[i], activeAngle[i], activeRadiusFactor[i], i);
+
+          tmpColor.copy(cyan).lerp(teal, Math.random() * 0.8);
+          activeColors[i * 3] = tmpColor.r;
+          activeColors[i * 3 + 1] = tmpColor.g;
+          activeColors[i * 3 + 2] = tmpColor.b;
+        }
+
+        const activeGeometry = new THREE.BufferGeometry();
+        const activePositionAttribute = new THREE.BufferAttribute(activePositions, 3);
+        activePositionAttribute.setUsage(THREE.DynamicDrawUsage);
+        activeGeometry.setAttribute("position", activePositionAttribute);
+        activeGeometry.setAttribute("color", new THREE.BufferAttribute(activeColors, 3));
+        const activeMaterial = new THREE.PointsMaterial({
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          map: glowTexture,
+          opacity: 0.9,
+          size: 0.22,
+          sizeAttenuation: true,
+          transparent: true,
+          vertexColors: true,
+        });
+        const activeLeads = new THREE.Points(activeGeometry, activeMaterial);
+        group.add(activeLeads);
+        disposables.push(activeGeometry, activeMaterial);
+
+        // Converging core
         const coreGeometry = new THREE.BufferGeometry();
         coreGeometry.setAttribute(
           "position",
@@ -269,7 +321,7 @@ export function Hero3DVisual({ children }: Hero3DVisualProps) {
           color: new THREE.Color("#a5f3fc"),
           depthWrite: false,
           map: glowTexture,
-          opacity: 0.95,
+          opacity: 0.75,
           size: 1.1,
           sizeAttenuation: true,
           transparent: true,
@@ -278,7 +330,7 @@ export function Hero3DVisual({ children }: Hero3DVisualProps) {
         group.add(core);
         disposables.push(coreGeometry, coreMaterial);
 
-        // 3) Orbiting AI/network nodes with beams into the core.
+        // 3) Orbiting AI nodes with beams
         const nodeCount = 6;
         const orbitCenter = new THREE.Vector3(0, 0.3, 0);
         const orbitRadius: number[] = [];
@@ -304,8 +356,8 @@ export function Hero3DVisual({ children }: Hero3DVisualProps) {
           color: teal,
           depthWrite: false,
           map: glowTexture,
-          opacity: 0.95,
-          size: 0.5,
+          opacity: 0.85,
+          size: 0.45,
           sizeAttenuation: true,
           transparent: true,
         });
@@ -331,9 +383,9 @@ export function Hero3DVisual({ children }: Hero3DVisualProps) {
         group.add(beams);
         disposables.push(beamGeometry, beamMaterial);
 
-        const updateNodes = (elapsed: number) => {
+        const updateNodes = (elapsedTime: number, speedMult: number) => {
           for (let n = 0; n < nodeCount; n += 1) {
-            const t = orbitPhase[n] + elapsed * orbitSpeed[n];
+            const t = orbitPhase[n] + elapsedTime * orbitSpeed[n] * speedMult;
             const radius = orbitRadius[n];
             const tilt = orbitTilt[n];
             const ox = Math.cos(t) * radius;
@@ -355,8 +407,7 @@ export function Hero3DVisual({ children }: Hero3DVisualProps) {
           beamPositionAttribute.needsUpdate = true;
         };
 
-        // 4) Delivery signal: an arc from the core out to an envelope, with a
-        //    pulse travelling along it (personalized email being sent).
+        // 4) Delivery arc and pulse
         const deliveryStart = new THREE.Vector3(0, BOTTOM_Y - 0.05, 0);
         const envelopeCenter = new THREE.Vector3(2.05, -1.9, 0.35);
         const deliveryCurve = new THREE.QuadraticBezierCurve3(
@@ -369,7 +420,7 @@ export function Hero3DVisual({ children }: Hero3DVisualProps) {
         const arcMaterial = new THREE.LineBasicMaterial({
           blending: THREE.AdditiveBlending,
           color: cyan,
-          opacity: 0.3,
+          opacity: 0.26,
           transparent: true,
         });
         const arc = new THREE.Line(arcGeometry, arcMaterial);
@@ -389,7 +440,7 @@ export function Hero3DVisual({ children }: Hero3DVisualProps) {
           depthWrite: false,
           map: glowTexture,
           opacity: 0.95,
-          size: 0.5,
+          size: 0.45,
           sizeAttenuation: true,
           transparent: true,
         });
@@ -397,43 +448,79 @@ export function Hero3DVisual({ children }: Hero3DVisualProps) {
         group.add(pulse);
         disposables.push(pulseGeometry, pulseMaterial);
 
-        // Envelope outline near the delivery output (lines only).
+        // Premium 3D Envelope body and flap meshes (solid transparent shapes)
         const ew = 0.62;
         const eh = 0.42;
         const ex = envelopeCenter.x;
         const ey = envelopeCenter.y;
         const ez = envelopeCenter.z;
-        const envelopeVertices = new Float32Array([
-          // rectangle
+
+        const envelopeBodyGeom = new THREE.PlaneGeometry(ew * 2, eh * 2);
+        const envelopeBodyMat = new THREE.MeshBasicMaterial({
+          color: new THREE.Color("#0c4a6e"),
+          transparent: true,
+          opacity: 0.15,
+          side: THREE.DoubleSide,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        });
+        const envelopeBodyMesh = new THREE.Mesh(envelopeBodyGeom, envelopeBodyMat);
+        envelopeBodyMesh.position.copy(envelopeCenter);
+        group.add(envelopeBodyMesh);
+        disposables.push(envelopeBodyGeom, envelopeBodyMat);
+
+        const flapVertices = new Float32Array([
+          -ew, eh, 0,
+          ew, eh, 0,
+          0, -0.02, 0.06,
+        ]);
+        const envelopeFlapGeom = new THREE.BufferGeometry();
+        envelopeFlapGeom.setAttribute("position", new THREE.BufferAttribute(flapVertices, 3));
+        const envelopeFlapMat = new THREE.MeshBasicMaterial({
+          color: new THREE.Color("#115e59"),
+          transparent: true,
+          opacity: 0.25,
+          side: THREE.DoubleSide,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        });
+        const envelopeFlapMesh = new THREE.Mesh(envelopeFlapGeom, envelopeFlapMat);
+        envelopeFlapMesh.position.copy(envelopeCenter);
+        group.add(envelopeFlapMesh);
+        disposables.push(envelopeFlapGeom, envelopeFlapMat);
+
+        // Envelope outer wireframe outline
+        const envelopeOutlineVertices = new Float32Array([
+          // outer box
           ex - ew, ey - eh, ez, ex + ew, ey - eh, ez,
           ex + ew, ey - eh, ez, ex + ew, ey + eh, ez,
           ex + ew, ey + eh, ez, ex - ew, ey + eh, ez,
           ex - ew, ey + eh, ez, ex - ew, ey - eh, ez,
-          // flap
-          ex - ew, ey + eh, ez, ex, ey - 0.02, ez,
-          ex, ey - 0.02, ez, ex + ew, ey + eh, ez,
+          // inner flap lines
+          ex - ew, ey + eh, ez, ex, ey - 0.02, ez + 0.06,
+          ex, ey - 0.02, ez + 0.06, ex + ew, ey + eh, ez,
         ]);
-        const envelopeGeometry = new THREE.BufferGeometry();
-        envelopeGeometry.setAttribute(
+        const envelopeOutlineGeometry = new THREE.BufferGeometry();
+        envelopeOutlineGeometry.setAttribute(
           "position",
-          new THREE.BufferAttribute(envelopeVertices, 3),
+          new THREE.BufferAttribute(envelopeOutlineVertices, 3),
         );
         const envelopeMaterial = new THREE.LineBasicMaterial({
           blending: THREE.AdditiveBlending,
           color: teal,
-          opacity: 0.7,
+          opacity: 0.6,
           transparent: true,
         });
         const envelope = new THREE.LineSegments(
-          envelopeGeometry,
+          envelopeOutlineGeometry,
           envelopeMaterial,
         );
         group.add(envelope);
-        disposables.push(envelopeGeometry, envelopeMaterial);
+        disposables.push(envelopeOutlineGeometry, envelopeMaterial);
 
         const pulseVector = new THREE.Vector3();
-        const updateDelivery = (elapsed: number) => {
-          const t = (elapsed * 0.32) % 1;
+        const updateDelivery = (elapsedTime: number) => {
+          const t = (elapsedTime * 0.32) % 1;
           deliveryCurve.getPoint(t, pulseVector);
           pulsePositionAttribute.setXYZ(
             0,
@@ -443,8 +530,24 @@ export function Hero3DVisual({ children }: Hero3DVisualProps) {
           );
           pulsePositionAttribute.needsUpdate = true;
           pulseMaterial.opacity = 0.4 + Math.sin(t * Math.PI) * 0.55;
-          envelopeMaterial.opacity = 0.5 + Math.sin(elapsed * 1.4) * 0.2;
         };
+
+        // Mouse coordinates for interactive parallax
+        let mouseX = 0;
+        let mouseY = 0;
+        let currentParallaxX = 0;
+        let currentParallaxY = 0;
+
+        const onMouseMove = (event: MouseEvent) => {
+          const rect = host.getBoundingClientRect();
+          if (rect.width === 0 || rect.height === 0) return;
+          const x = event.clientX - rect.left;
+          const y = event.clientY - rect.top;
+          mouseX = (x / rect.width) * 2 - 1;
+          mouseY = -(y / rect.height) * 2 + 1;
+        };
+
+        host.addEventListener("mousemove", onMouseMove);
 
         const clock = new THREE.Clock();
         let frame = 0;
@@ -452,31 +555,111 @@ export function Hero3DVisual({ children }: Hero3DVisualProps) {
         let elapsed = 0;
 
         const renderFrame = () => {
-          // Clamp delta (and accumulate elapsed from it) so a tab/scroll pause
-          // never produces a motion spike when the loop resumes.
           const delta = Math.min(clock.getDelta(), 0.05);
           elapsed += delta;
 
-          for (let i = 0; i < leadCount; i += 1) {
-            leadProgress[i] += leadSpeed[i] * delta;
-            if (leadProgress[i] >= 1) {
-              leadProgress[i] -= 1;
-              leadAngle[i] = Math.random() * Math.PI * 2;
-            }
-            placeLead(i);
-          }
-          leadPositionAttribute.needsUpdate = true;
+          const currentSection = activeSectionRef.current;
 
-          updateNodes(elapsed);
+          // Parallax camera lerp
+          currentParallaxX += (mouseX - currentParallaxX) * 0.08;
+          currentParallaxY += (mouseY - currentParallaxY) * 0.08;
+
+          // Dynamic speeds/sizes based on hovering state
+          const isContacts = currentSection === "contacts";
+          const isScoring = currentSection === "scoring";
+          const isSegmentation = currentSection === "segmentation";
+          const isCampaign = currentSection === "campaign";
+          const isEmail = currentSection === "email";
+
+          // 1) Funnel rings sync
+          ringsList.forEach((item, r) => {
+            const ringMat = item.line.material as import("three").LineBasicMaterial;
+            if (isSegmentation) {
+              const pulseScale = 1.0 + Math.sin(elapsed * 5 + r) * 0.05;
+              item.line.scale.set(pulseScale, 1.0, pulseScale);
+              ringMat.opacity = item.defaultOpacity + 0.35 + Math.sin(elapsed * 6 + r) * 0.12;
+              ringMat.color.copy(cyan);
+            } else {
+              item.line.scale.set(1.0, 1.0, 1.0);
+              ringMat.opacity = item.defaultOpacity;
+              const t = r / (ringCount - 1);
+              ringMat.color.copy(indigo).lerp(cyan, t);
+            }
+          });
+
+          // 2) Flow speed multiplier
+          const speedMultiplier = isContacts ? 2.5 : 1.0;
+
+          // Update Ambient Leads
+          for (let i = 0; i < ambientCount; i += 1) {
+            ambientProgress[i] += ambientSpeed[i] * delta * speedMultiplier;
+            if (ambientProgress[i] >= 1) {
+              ambientProgress[i] -= 1;
+              ambientAngle[i] = Math.random() * Math.PI * 2;
+            }
+            placeLead(ambientPositions, ambientProgress[i], ambientAngle[i], ambientRadiusFactor[i], i);
+          }
+          ambientPositionAttribute.needsUpdate = true;
+          ambientMaterial.size = isContacts ? 0.16 : 0.08;
+          ambientMaterial.opacity = isContacts ? 0.95 : 0.6;
+
+          // Update Active Leads
+          for (let i = 0; i < activeCount; i += 1) {
+            activeProgress[i] += activeSpeed[i] * delta * speedMultiplier;
+            if (activeProgress[i] >= 1) {
+              activeProgress[i] -= 1;
+              activeAngle[i] = Math.random() * Math.PI * 2;
+            }
+            placeLead(activePositions, activeProgress[i], activeAngle[i], activeRadiusFactor[i], i);
+          }
+          activePositionAttribute.needsUpdate = true;
+          activeMaterial.size = isContacts ? 0.36 : 0.22;
+          activeMaterial.opacity = isContacts ? 1.0 : 0.9;
+
+          // 3) Orbiting AI nodes speed multiplier
+          const nodeSpeedMultiplier = isScoring ? 3.0 : 1.0;
+          updateNodes(elapsed, nodeSpeedMultiplier);
+          nodeMaterial.size = isScoring ? 0.7 : 0.45;
+          nodeMaterial.opacity = isScoring ? 1.0 : 0.85;
+          beamMaterial.opacity = isScoring ? 0.65 : 0.28;
+
+          // 4) Core converging point
+          if (isCampaign) {
+            coreMaterial.size = 1.8 * (1.0 + Math.sin(elapsed * 8) * 0.22);
+            coreMaterial.opacity = 1.0;
+          } else {
+            coreMaterial.size = 1.1;
+            coreMaterial.opacity = 0.7 + Math.sin(elapsed * 2.2) * 0.25;
+          }
+
+          // 5) Arc and envelope
+          arcMaterial.opacity = isEmail ? 0.75 : 0.26;
+          pulseMaterial.size = isEmail ? 0.85 : 0.45;
+          envelopeMaterial.opacity = isEmail ? 1.0 : 0.6;
+
+          if (envelopeBodyMesh && envelopeFlapMesh) {
+            const bodyMat = envelopeBodyMesh.material as import("three").MeshBasicMaterial;
+            const flapMat = envelopeFlapMesh.material as import("three").MeshBasicMaterial;
+            bodyMat.opacity = isEmail ? 0.45 : 0.15;
+            flapMat.opacity = isEmail ? 0.6 : 0.25;
+
+            const envelopeFloat = isEmail ? 1.05 + Math.sin(elapsed * 6) * 0.05 : 1.0;
+            envelope.scale.setScalar(envelopeFloat);
+            envelopeBodyMesh.scale.setScalar(envelopeFloat);
+            envelopeFlapMesh.scale.setScalar(envelopeFloat);
+          }
+
           updateDelivery(elapsed);
 
-          group.rotation.y = elapsed * 0.1;
-          group.rotation.x = 0.34 + Math.sin(elapsed * 0.35) * 0.05;
-          camera.position.x = Math.sin(elapsed * 0.18) * 0.35;
-          camera.position.y = 0.4 + Math.sin(elapsed * 0.22) * 0.12;
+          // Apply rotation including mouse movement
+          group.rotation.y = elapsed * 0.08 + currentParallaxX * 0.25;
+          group.rotation.x = 0.34 + Math.sin(elapsed * 0.35) * 0.04 - currentParallaxY * 0.15;
+
+          // Camera floats slightly and tracks mouse
+          camera.position.x = Math.sin(elapsed * 0.18) * 0.35 + currentParallaxX * 0.8;
+          camera.position.y = 0.4 + Math.sin(elapsed * 0.22) * 0.12 + currentParallaxY * 0.6;
           camera.lookAt(0, 0, 0);
 
-          coreMaterial.opacity = 0.7 + Math.sin(elapsed * 2.2) * 0.25;
           renderer.render(scene, camera);
         };
 
@@ -546,6 +729,7 @@ export function Hero3DVisual({ children }: Hero3DVisualProps) {
           intersectionObserver.disconnect();
           resizeObserver.disconnect();
           document.removeEventListener("visibilitychange", handleVisibility);
+          host.removeEventListener("mousemove", onMouseMove);
           for (const disposable of disposables) {
             disposable.dispose();
           }

@@ -1,31 +1,28 @@
-import { randomBytes, scryptSync } from "node:crypto";
-
 import { NextResponse, type NextRequest } from "next/server";
 
-import { signJWT } from "@/lib/auth";
-import { getDbClient, initializeDatabase } from "@/lib/db";
+import {
+  REGISTRATION_OTP_TTL_SECONDS,
+  generateRegistrationOtp,
+  hashOtp,
+} from "@/lib/auth-otp";
+import { initializeDatabase, query } from "@/lib/db";
+import { sendRegistrationOtpEmail } from "@/lib/mail/auth";
+import { sanitizeMailError } from "@/lib/mail/nodemailer";
+import { EMAIL_TAKEN_ERROR, hashPassword } from "@/lib/registration";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const AUTH_COOKIE_NAME = "auth_token";
-const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days, aligned with JWT expiry.
-const OWNER_ROLE = "owner";
-
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-const INSERT_WORKSPACE_SQL =
-  'INSERT INTO "Workspaces" (name) VALUES ($1) RETURNING id';
 const CHECK_USER_EXISTS_SQL = 'SELECT 1 FROM "Users" WHERE email = $1';
-const INSERT_USER_SQL =
-  'INSERT INTO "Users" (email, password_hash, role) VALUES ($1, $2, $3) RETURNING id';
-const UPDATE_WORKSPACE_OWNER_SQL =
-  'UPDATE "Workspaces" SET owner_id = $1 WHERE id = $2';
-const INSERT_MEMBERSHIP_SQL =
-  'INSERT INTO "Workspace_members" (workspace_id, user_id, role) VALUES ($1, $2, $3)';
-
-// Sentinel message mapped to a 400 by statusForError.
-const EMAIL_TAKEN_ERROR = "Email already registered";
+const UPSERT_REGISTRATION_OTP_SQL =
+  'INSERT INTO "Registration_otps" (email, password_hash, workspace_name, otp_hash, attempts, expires_at) ' +
+  "VALUES ($1, $2, $3, $4, 0, NOW() + ($5 * INTERVAL '1 second')) " +
+  "ON CONFLICT (email) DO UPDATE SET " +
+  "password_hash = EXCLUDED.password_hash, workspace_name = EXCLUDED.workspace_name, " +
+  "otp_hash = EXCLUDED.otp_hash, attempts = 0, expires_at = EXCLUDED.expires_at, updated_at = NOW()";
+const DELETE_REGISTRATION_OTP_SQL =
+  'DELETE FROM "Registration_otps" WHERE email = $1';
 
 type RegisterBody = {
   email?: unknown;
@@ -38,17 +35,6 @@ type ParsedRegistration = {
   password: string;
   workspaceName: string;
 };
-
-/**
- * Hash a password for local/dev storage using Node's scrypt with a random salt.
- * Stored as `salt:derivedKey` (hex). Replace with a managed identity provider
- * before production.
- */
-function hashPassword(password: string): string {
-  const salt = randomBytes(16);
-  const derivedKey = scryptSync(password, salt, 64);
-  return `${salt.toString("hex")}:${derivedKey.toString("hex")}`;
-}
 
 function parseRegisterBody(body: RegisterBody): ParsedRegistration {
   if (typeof body.email !== "string" || body.email.trim().length === 0) {
@@ -89,74 +75,11 @@ function statusForError(message: string): number {
   return 500;
 }
 
-type RegistrationResult = {
-  userId: number;
-  workspaceId: number;
-};
+async function assertEmailIsAvailable(email: string): Promise<void> {
+  const existing = await query(CHECK_USER_EXISTS_SQL, [email]);
 
-/**
- * Provision a workspace + owner user + membership inside a single transaction.
- *
- * The pooled client is acquired here and ALWAYS released in `finally`: a normal
- * `release()` on success/handled rollback, or `release(true)` to destroy the
- * connection when it is left in an unknown state (a failed ROLLBACK), which
- * prevents a poisoned connection from being reused and exhausting the pool.
- */
-async function runRegistrationTransaction(
-  registration: ParsedRegistration,
-): Promise<RegistrationResult> {
-  const client = await getDbClient();
-  let connectionIsBroken = false;
-
-  try {
-    await client.query("BEGIN");
-
-    // Step 1: create the workspace and capture its integer id.
-    const workspaceResult = await client.query<{ id: number }>(
-      INSERT_WORKSPACE_SQL,
-      [registration.workspaceName],
-    );
-    const newWorkspaceId = workspaceResult.rows[0].id;
-
-    // Step 2: reject duplicate emails (rolls back via thrown sentinel), then
-    // create the user with a securely hashed password.
-    const existing = await client.query(CHECK_USER_EXISTS_SQL, [
-      registration.email,
-    ]);
-    if (existing.rowCount && existing.rowCount > 0) {
-      throw new Error(EMAIL_TAKEN_ERROR);
-    }
-
-    const userResult = await client.query<{ id: number }>(INSERT_USER_SQL, [
-      registration.email,
-      hashPassword(registration.password),
-      OWNER_ROLE,
-    ]);
-    const newUserId = userResult.rows[0].id;
-
-    // Link the workspace back to its owner now that the user id exists.
-    await client.query(UPDATE_WORKSPACE_OWNER_SQL, [newUserId, newWorkspaceId]);
-
-    // Step 3: bind the user to the workspace as its owner.
-    await client.query(INSERT_MEMBERSHIP_SQL, [
-      newWorkspaceId,
-      newUserId,
-      OWNER_ROLE,
-    ]);
-
-    await client.query("COMMIT");
-
-    return { userId: newUserId, workspaceId: newWorkspaceId };
-  } catch (error) {
-    await client.query("ROLLBACK").catch((rollbackError) => {
-      // A failing ROLLBACK means the connection is no longer trustworthy.
-      connectionIsBroken = true;
-      console.error("Rollback failed:", rollbackError);
-    });
-
-    throw error; // rethrow to be handled by the outer API error handler.
-  } finally {
-    client.release(connectionIsBroken);
+  if (existing.rowCount && existing.rowCount > 0) {
+    throw new Error(EMAIL_TAKEN_ERROR);
   }
 }
 
@@ -166,35 +89,49 @@ export async function POST(request: NextRequest) {
 
     const body = (await request.json()) as RegisterBody;
     const registration = parseRegisterBody(body);
+    const otp = generateRegistrationOtp();
 
-    // Atomic, system-level provisioning across "Workspaces", "Users" and
-    // "Workspace_members". The client is owned explicitly here so its release
-    // back to the pool is guaranteed by the `finally` block below, regardless
-    // of how the transaction resolves.
-    const { userId, workspaceId } = await runRegistrationTransaction(registration);
+    await assertEmailIsAvailable(registration.email);
 
-    const token = await signJWT({ userId, workspaceId });
+    await query(UPSERT_REGISTRATION_OTP_SQL, [
+      registration.email,
+      hashPassword(registration.password),
+      registration.workspaceName,
+      hashOtp(otp),
+      REGISTRATION_OTP_TTL_SECONDS,
+    ]);
 
-    const response = NextResponse.json(
-      { success: true, data: { token, userId, workspaceId } },
-      { status: 201 },
+    try {
+      await sendRegistrationOtpEmail({
+        email: registration.email,
+        otp,
+        expiresInMinutes: REGISTRATION_OTP_TTL_SECONDS / 60,
+      });
+    } catch (mailError) {
+      await query(DELETE_REGISTRATION_OTP_SQL, [registration.email]).catch(
+        (cleanupError) => {
+          console.error("Failed to clean pending registration OTP:", cleanupError);
+        },
+      );
+      throw new Error(sanitizeMailError(mailError));
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          verificationRequired: true,
+          email: registration.email,
+          expiresInSeconds: REGISTRATION_OTP_TTL_SECONDS,
+        },
+      },
+      { status: 202 },
     );
-
-    response.cookies.set({
-      name: AUTH_COOKIE_NAME,
-      value: token,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: COOKIE_MAX_AGE_SECONDS,
-    });
-
-    return response;
   } catch (error) {
-    console.error("Failed to register:", error);
+    console.error("Failed to start registration:", error);
 
-    const message = error instanceof Error ? error.message : "Failed to register";
+    const message =
+      error instanceof Error ? error.message : "Failed to start registration";
 
     return NextResponse.json(
       { success: false, error: message },
