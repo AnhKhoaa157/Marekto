@@ -23,6 +23,7 @@ export const openApiSpec = {
   servers: [{ url: "/", description: "Current origin" }],
   tags: [
     { name: "Auth", description: "Registration, login, and logout" },
+    { name: "Profile", description: "Authenticated user profile" },
     { name: "Lists", description: "Contact lists (tenant-scoped)" },
     { name: "Campaigns", description: "Email campaigns (tenant-scoped)" },
     { name: "Worker", description: "Background / system triggers" },
@@ -71,6 +72,23 @@ export const openApiSpec = {
         },
         required: ["success", "data"],
       },
+      RegistrationOtpData: {
+        type: "object",
+        properties: {
+          verificationRequired: { type: "boolean", example: true },
+          email: { type: "string", format: "email", example: "owner@acme.com" },
+          expiresInSeconds: { type: "integer", example: 600 },
+        },
+        required: ["verificationRequired", "email", "expiresInSeconds"],
+      },
+      RegistrationOtpResponse: {
+        type: "object",
+        properties: {
+          success: { type: "boolean", example: true },
+          data: { $ref: "#/components/schemas/RegistrationOtpData" },
+        },
+        required: ["success", "data"],
+      },
       LogoutData: {
         type: "object",
         properties: {
@@ -86,6 +104,35 @@ export const openApiSpec = {
         },
         required: ["success", "data"],
       },
+      ProfileData: {
+        type: "object",
+        properties: {
+          id: { type: "integer", example: 1 },
+          email: { type: "string", format: "email", example: "user@example.com" },
+          role: { type: "string", example: "owner" },
+          first_name: { type: "string", nullable: true, example: "First" },
+          last_name: { type: "string", nullable: true, example: "Last" },
+          phone: { type: "string", nullable: true, example: "+84000000000" },
+          created_at: { type: "string", format: "date-time" },
+        },
+        required: ["id", "email", "role", "first_name", "last_name", "phone"],
+      },
+      ProfileResponse: {
+        type: "object",
+        properties: {
+          success: { type: "boolean", example: true },
+          data: { $ref: "#/components/schemas/ProfileData" },
+        },
+        required: ["success", "data"],
+      },
+      UpdateProfileRequest: {
+        type: "object",
+        properties: {
+          first_name: { type: "string", nullable: true, maxLength: 120 },
+          last_name: { type: "string", nullable: true, maxLength: 120 },
+          phone: { type: "string", nullable: true, maxLength: 40 },
+        },
+      },
       RegisterRequest: {
         type: "object",
         properties: {
@@ -98,6 +145,14 @@ export const openApiSpec = {
           },
         },
         required: ["email", "password"],
+      },
+      VerifyRegistrationRequest: {
+        type: "object",
+        properties: {
+          email: { type: "string", format: "email", example: "owner@acme.com" },
+          otp: { type: "string", example: "123456" },
+        },
+        required: ["email", "otp"],
       },
       LoginRequest: {
         type: "object",
@@ -190,15 +245,51 @@ export const openApiSpec = {
     "/api/auth/register": {
       post: {
         tags: ["Auth"],
-        summary: "Register a user and provision their workspace",
+        summary: "Start registration and email an OTP",
         description:
-          "Atomically creates a Workspace, a User, and an owner Workspace_members binding, then returns a signed JWT and sets the auth_token cookie.",
+          "Validates the requested owner account, stores a pending registration with hashed secrets, and sends a real OTP email. The account is created only after /api/auth/register/verify succeeds.",
         security: [],
         requestBody: {
           required: true,
           content: {
             "application/json": {
               schema: { $ref: "#/components/schemas/RegisterRequest" },
+            },
+          },
+        },
+        responses: {
+          "202": {
+            description: "OTP sent. Verify the code to create the account.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/RegistrationOtpResponse" },
+              },
+            },
+          },
+          "400": {
+            description: "Invalid input or email already registered.",
+            content: {
+              "application/json": {
+                schema: { $ref: ERROR_ENVELOPE_REF },
+              },
+            },
+          },
+          "500": { $ref: "#/components/responses/ServerError" },
+        },
+      },
+    },
+    "/api/auth/register/verify": {
+      post: {
+        tags: ["Auth"],
+        summary: "Verify registration OTP and create workspace",
+        description:
+          "Verifies the emailed OTP, atomically creates the Workspace, User, and owner Workspace_members binding, then returns a signed JWT and sets the auth_token cookie.",
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/VerifyRegistrationRequest" },
             },
           },
         },
@@ -212,7 +303,7 @@ export const openApiSpec = {
             },
           },
           "400": {
-            description: "Invalid input or email already registered.",
+            description: "Invalid or expired OTP, invalid input, or email already registered.",
             content: {
               "application/json": {
                 schema: { $ref: ERROR_ENVELOPE_REF },
@@ -273,6 +364,71 @@ export const openApiSpec = {
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/LogoutResponse" },
+              },
+            },
+          },
+          "500": { $ref: "#/components/responses/ServerError" },
+        },
+      },
+    },
+    "/api/profile": {
+      get: {
+        tags: ["Profile"],
+        summary: "Fetch the authenticated user profile",
+        description:
+          "Returns the profile fields for the signed-in user. The route is protected by JWT/cookie authentication.",
+        security: [{ BearerAuth: [] }],
+        responses: {
+          "200": {
+            description: "Authenticated profile.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ProfileResponse" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "404": {
+            description: "Profile row not found.",
+            content: {
+              "application/json": {
+                schema: { $ref: ERROR_ENVELOPE_REF },
+              },
+            },
+          },
+          "500": { $ref: "#/components/responses/ServerError" },
+        },
+      },
+      patch: {
+        tags: ["Profile"],
+        summary: "Update the authenticated user profile",
+        description:
+          "Updates editable personal profile fields for the signed-in user.",
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/UpdateProfileRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Updated profile.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ProfileResponse" },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "404": {
+            description: "Profile row not found.",
+            content: {
+              "application/json": {
+                schema: { $ref: ERROR_ENVELOPE_REF },
               },
             },
           },
@@ -353,7 +509,7 @@ export const openApiSpec = {
         tags: ["Worker"],
         summary: "Trigger the campaign-sending worker",
         description:
-          "System trigger protected by CRON_SECRET in production. Claims due campaigns atomically per workspace. Until SMTP delivery is implemented, claimed campaigns fail truthfully and no sent email logs are created.",
+          "System trigger protected by CRON_SECRET in production. Claims due campaigns atomically per workspace, sends real SMTP email for each matched contact, and records sent or failed Email_logs for actual delivery outcomes.",
         security: [{ BearerAuth: [] }],
         responses: {
           "200": {
@@ -371,7 +527,8 @@ export const openApiSpec = {
                         campaigns_processed: { type: "integer", example: 0 },
                         campaigns_failed: { type: "integer", example: 0 },
                         emails_sent: { type: "integer", example: 0 },
-                        delivery_available: { type: "boolean", example: false },
+                        emails_failed: { type: "integer", example: 0 },
+                        delivery_available: { type: "boolean", example: true },
                         details: { type: "array", items: { type: "object" } },
                       },
                     },
