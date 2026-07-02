@@ -134,7 +134,7 @@ export function buildContactSelection(
 
   return {
     text:
-      'SELECT id, email FROM "Contacts" WHERE ' +
+      'SELECT id, email, first_name, last_name, properties FROM "Contacts" WHERE ' +
       conditions.join(" AND ") +
       " ORDER BY id ASC",
     params,

@@ -205,6 +205,12 @@ export const openApiSpec = {
               "JSONB audience filter. Keys matching Contact columns (email, first_name, last_name, phone) match directly; any other key matches the Contact's JSONB properties.",
             example: { country: "VN", first_name: "Khoa" },
           },
+          ai_personalization_enabled: {
+            type: "boolean",
+            default: false,
+            description:
+              "When true, the worker personalizes each recipient's email with Gemini before SMTP delivery, falling back to the raw template if Gemini is unavailable. When false, the raw template is sent as-is.",
+          },
           scheduled_at: {
             type: "string",
             format: "date-time",
@@ -585,7 +591,7 @@ export const openApiSpec = {
         tags: ["Worker"],
         summary: "Trigger the campaign-sending worker",
         description:
-          "System trigger protected by CRON_SECRET in production. Claims due campaigns atomically per workspace, sends real SMTP email for each matched contact, and records sent or failed Email_logs for actual delivery outcomes.",
+          "System trigger protected by CRON_SECRET in production. Claims due campaigns atomically per workspace, personalizes recipients with Gemini when the campaign enables it (falling back to the raw template), sends real SMTP email for each matched contact, and records sent or failed Email_logs with personalization_source and personalization_error for actual delivery outcomes.",
         security: [{ BearerAuth: [] }],
         responses: {
           "200": {

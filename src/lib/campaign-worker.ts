@@ -15,7 +15,15 @@ export const CLAIM_CAMPAIGN_SQL =
   ") ORDER BY candidate.run_at ASC NULLS LAST, candidate.id ASC " +
   "FOR UPDATE SKIP LOCKED LIMIT 1" +
   ") AND campaign.workspace_id = $1 " +
-  "RETURNING campaign.id, campaign.workspace_id, campaign.template_id, campaign.name, campaign.target_filters";
+  "RETURNING campaign.id, campaign.workspace_id, campaign.template_id, campaign.name, " +
+  "campaign.target_filters, campaign.ai_personalization_enabled";
+
+export const INSERT_EMAIL_LOG_SQL =
+  'INSERT INTO "Email_logs" ' +
+  "(workspace_id, campaign_id, contact_id, status, error_message, personalization_source, personalization_error) " +
+  "VALUES ($1, $2, $3, $4, $5, $6, $7)";
+
+export type EmailPersonalizationSource = "gemini" | "template";
 
 export type CampaignDeliveryStatus = typeof SENT_STATUS | typeof FAILED_STATUS;
 

@@ -39,6 +39,21 @@ export function parseUserCampaignStatus(
   return normalized as UserCampaignStatus;
 }
 
+export function parseAiPersonalizationEnabled(
+  value: unknown,
+  fallback: boolean,
+): boolean {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  if (typeof value !== "boolean") {
+    throw new Error("ai_personalization_enabled must be a boolean");
+  }
+
+  return value;
+}
+
 export function assertUserCampaignIsEditable(status: CampaignStatus): void {
   if (status === "processing" || status === "sent") {
     throw new Error("Processing or sent campaigns cannot be edited");

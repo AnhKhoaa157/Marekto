@@ -3,6 +3,7 @@
 import { parseCampaignTargetFilters } from "@/lib/campaign-filters";
 import {
   assertCampaignSchedule,
+  parseAiPersonalizationEnabled,
   parseUserCampaignStatus,
 } from "@/lib/campaign-status";
 import { initializeDatabase, withWorkspace } from "@/lib/db";
@@ -12,12 +13,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const SELECT_CAMPAIGNS_SQL =
-  'SELECT id, workspace_id, template_id, name, status, target_filters, scheduled_at, run_at, created_at, updated_at FROM "Campaigns" WHERE workspace_id = $1 ORDER BY created_at DESC, id DESC';
+  'SELECT id, workspace_id, template_id, name, status, target_filters, ai_personalization_enabled, scheduled_at, run_at, created_at, updated_at FROM "Campaigns" WHERE workspace_id = $1 ORDER BY created_at DESC, id DESC';
 const INSERT_CAMPAIGN_SQL =
-  'INSERT INTO "Campaigns" (workspace_id, template_id, name, status, target_filters, scheduled_at, run_at) ' +
-  'SELECT $1, $2, $3, $4, $5::jsonb, $6, $6 ' +
+  'INSERT INTO "Campaigns" (workspace_id, template_id, name, status, target_filters, ai_personalization_enabled, scheduled_at, run_at) ' +
+  'SELECT $1, $2, $3, $4, $5::jsonb, $6, $7, $7 ' +
   'WHERE $2::int IS NULL OR EXISTS (SELECT 1 FROM "Templates" WHERE id = $2 AND workspace_id = $1) ' +
-  'RETURNING id, workspace_id, template_id, name, status, target_filters, scheduled_at, run_at, created_at, updated_at';
+  'RETURNING id, workspace_id, template_id, name, status, target_filters, ai_personalization_enabled, scheduled_at, run_at, created_at, updated_at';
 
 type CampaignRow = {
   id: number;
@@ -26,6 +27,7 @@ type CampaignRow = {
   name: string;
   status: string;
   target_filters: Record<string, unknown>;
+  ai_personalization_enabled: boolean;
   scheduled_at: Date | null;
   run_at: Date | null;
   created_at: Date;
@@ -37,6 +39,7 @@ type CreateCampaignBody = {
   template_id?: unknown;
   status?: unknown;
   target_filters?: unknown;
+  ai_personalization_enabled?: unknown;
   scheduled_at?: unknown;
 };
 
@@ -86,6 +89,10 @@ function parseCreateCampaignBody(body: CreateCampaignBody) {
     templateId: parseOptionalTemplateId(body.template_id),
     status,
     targetFilters: parseCampaignTargetFilters(body.target_filters),
+    aiPersonalizationEnabled: parseAiPersonalizationEnabled(
+      body.ai_personalization_enabled,
+      false,
+    ),
     scheduledAt: status === "pending" ? scheduledAt : null,
   };
 }
@@ -99,6 +106,7 @@ function statusForError(message: string): number {
     "Invalid status",
     "Only draft or pending status can be set by users",
     "target_filters must be a JSON object",
+    "ai_personalization_enabled must be a boolean",
     "Invalid scheduled_at",
     "Scheduled campaigns require a delivery time",
   ].includes(message);
@@ -151,6 +159,7 @@ export async function POST(request: NextRequest) {
         campaign.name,
         campaign.status,
         JSON.stringify(campaign.targetFilters),
+        campaign.aiPersonalizationEnabled,
         campaign.scheduledAt,
       ]);
 

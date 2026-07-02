@@ -8,6 +8,7 @@ import {
   assertCampaignSchedule,
   assertUserCampaignIsEditable,
   isCampaignStatus,
+  parseAiPersonalizationEnabled,
   parseUserCampaignStatus,
   type CampaignStatus,
   type UserCampaignStatus,
@@ -21,13 +22,13 @@ export const dynamic = "force-dynamic";
 const UPDATE_CAMPAIGN_SQL =
   'UPDATE "Campaigns" SET name = $1, status = $2, target_filters = $3::jsonb, ' +
   "scheduled_at = $4::timestamptz, run_at = $4::timestamptz, template_id = $5::int, " +
-  "updated_at = CURRENT_TIMESTAMP " +
-  "WHERE id = $6 AND workspace_id = $7 " +
-  "RETURNING id, workspace_id, template_id, name, status, target_filters, scheduled_at, run_at, created_at, updated_at";
+  "ai_personalization_enabled = $6, updated_at = CURRENT_TIMESTAMP " +
+  "WHERE id = $7 AND workspace_id = $8 " +
+  "RETURNING id, workspace_id, template_id, name, status, target_filters, ai_personalization_enabled, scheduled_at, run_at, created_at, updated_at";
 const SELECT_CAMPAIGN_FOR_UPDATE_SQL =
-  'SELECT id, workspace_id, template_id, name, status, target_filters, scheduled_at, run_at, created_at, updated_at FROM "Campaigns" WHERE id = $1 AND workspace_id = $2 FOR UPDATE';
+  'SELECT id, workspace_id, template_id, name, status, target_filters, ai_personalization_enabled, scheduled_at, run_at, created_at, updated_at FROM "Campaigns" WHERE id = $1 AND workspace_id = $2 FOR UPDATE';
 const DELETE_CAMPAIGN_SQL =
-  'DELETE FROM "Campaigns" WHERE id = $1 AND workspace_id = $2 RETURNING id, workspace_id, template_id, name, status, target_filters, scheduled_at, run_at, created_at, updated_at';
+  'DELETE FROM "Campaigns" WHERE id = $1 AND workspace_id = $2 RETURNING id, workspace_id, template_id, name, status, target_filters, ai_personalization_enabled, scheduled_at, run_at, created_at, updated_at';
 
 type RouteParams = {
   params: Promise<{ id: string }>;
@@ -40,6 +41,7 @@ type CampaignRow = {
   name: string;
   status: CampaignStatus;
   target_filters: CampaignTargetFilters;
+  ai_personalization_enabled: boolean;
   scheduled_at: Date | null;
   run_at: Date | null;
   created_at: Date;
@@ -51,6 +53,7 @@ type UpdateCampaignBody = {
   template_id?: unknown;
   status?: unknown;
   target_filters?: unknown;
+  ai_personalization_enabled?: unknown;
   scheduled_at?: unknown;
 };
 
@@ -147,6 +150,7 @@ function statusForError(message: string): number {
     "Only draft or pending status can be set by users",
     "Processing or sent campaigns cannot be edited",
     "target_filters must be a JSON object",
+    "ai_personalization_enabled must be a boolean",
     "Invalid scheduled_at",
     "Invalid template id",
     "At least one field is required",
@@ -176,13 +180,15 @@ export async function PUT(request: NextRequest, context: RouteParams) {
     const targetFilters = parseTargetFilters(body.target_filters);
     const scheduledAt = parseScheduledAt(body.scheduled_at);
     const templateId = parseTemplateId(body.template_id);
+    const aiPersonalizationProvided = body.ai_personalization_enabled !== undefined;
 
     if (
       name === null &&
       status === null &&
       targetFilters === null &&
       !scheduledAt.provided &&
-      !templateId.provided
+      !templateId.provided &&
+      !aiPersonalizationProvided
     ) {
       throw new Error("At least one field is required");
     }
@@ -232,6 +238,10 @@ export async function PUT(request: NextRequest, context: RouteParams) {
         ),
         nextScheduledAt,
         templateId.provided ? templateId.value : currentCampaign.template_id,
+        parseAiPersonalizationEnabled(
+          body.ai_personalization_enabled,
+          currentCampaign.ai_personalization_enabled,
+        ),
         campaignId,
         workspaceId,
       ]);

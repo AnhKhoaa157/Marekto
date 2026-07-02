@@ -12,7 +12,7 @@
 const REQUIRED_ENV_VARS = ["DATABASE_URL"] as const;
 const INITIALIZATION_TIMEOUT_MS = 60_000;
 const SLOW_QUERY_THRESHOLD_MS = 1_000;
-const MIGRATION_VERSION = "v7_ai_outputs_cache";
+const MIGRATION_VERSION = "v8_ai_personalization_controls";
 
 type SafeDatabaseConfig = {
   source: "DATABASE_URL";
@@ -292,6 +292,7 @@ CREATE TABLE IF NOT EXISTS "Campaigns" (
   name VARCHAR NOT NULL,
   status VARCHAR NOT NULL DEFAULT 'draft',
   target_filters JSONB NOT NULL DEFAULT '{}'::jsonb,
+  ai_personalization_enabled BOOLEAN NOT NULL DEFAULT false,
   run_at TIMESTAMPTZ,
   scheduled_at TIMESTAMPTZ,
   processing_started_at TIMESTAMPTZ,
@@ -309,6 +310,8 @@ CREATE TABLE IF NOT EXISTS "Email_logs" (
   contact_id INT REFERENCES "Contacts"(id) ON DELETE CASCADE,
   status VARCHAR NOT NULL DEFAULT 'sent',
   error_message TEXT,
+  personalization_source VARCHAR(32),
+  personalization_error TEXT,
   sent_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -478,6 +481,8 @@ ALTER TABLE "Campaigns" ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMPTZ;
 ALTER TABLE "Campaigns" ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
 ALTER TABLE "Campaigns" ADD COLUMN IF NOT EXISTS processing_started_at TIMESTAMPTZ;
 ALTER TABLE "Campaigns" ADD COLUMN IF NOT EXISTS failure_reason TEXT;
+-- Phase 10.1: campaign-level AI personalization toggle.
+ALTER TABLE "Campaigns" ADD COLUMN IF NOT EXISTS ai_personalization_enabled BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE "Campaigns" DISABLE ROW LEVEL SECURITY;
 
 UPDATE "Campaigns" SET status = 'pending' WHERE status = 'scheduled';
@@ -548,6 +553,9 @@ $do$;
 
 ALTER TABLE "Email_logs" ADD COLUMN IF NOT EXISTS workspace_id INT REFERENCES "Workspaces"(id) ON DELETE CASCADE;
 ALTER TABLE "Email_logs" ADD COLUMN IF NOT EXISTS error_message TEXT;
+-- Phase 10.1: per-recipient AI personalization delivery observability.
+ALTER TABLE "Email_logs" ADD COLUMN IF NOT EXISTS personalization_source VARCHAR(32);
+ALTER TABLE "Email_logs" ADD COLUMN IF NOT EXISTS personalization_error TEXT;
 ALTER TABLE "Email_logs" ALTER COLUMN status SET DEFAULT 'sent';
 ALTER TABLE "Email_logs" ALTER COLUMN sent_at SET DEFAULT CURRENT_TIMESTAMP;
 ALTER TABLE "Email_logs" ALTER COLUMN campaign_id DROP NOT NULL;
