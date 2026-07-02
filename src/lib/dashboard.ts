@@ -1,4 +1,13 @@
 import { initializeDatabase, withWorkspace } from "@/lib/db";
+import {
+  SELECT_EMAIL_DELIVERY_METRICS_SQL,
+  SELECT_RECENT_DELIVERY_FAILURES_SQL,
+  toEmailDeliveryMetrics,
+  type EmailDeliveryMetricsRow,
+  type RecentDeliveryFailureRow,
+} from "@/lib/dashboard-delivery";
+
+export type { RecentDeliveryFailureRow } from "@/lib/dashboard-delivery";
 
 type CountRow = {
   count: number;
@@ -17,12 +26,15 @@ export type DashboardMetrics = {
   campaigns: number;
   lists: number;
   templates: number;
+  sentEmails: number;
+  failedEmails: number;
 };
 
 export type ReadyDashboardData = {
   status: "ready";
   metrics: DashboardMetrics;
   campaigns: CampaignRow[];
+  recentDeliveryFailures: RecentDeliveryFailureRow[];
   error: null;
 };
 
@@ -55,6 +67,18 @@ export async function loadDashboardData(
         "ORDER BY created_at DESC, id DESC LIMIT 8",
       [workspaceId, searchQuery],
     );
+    const deliveryMetricsResult = await client.query<EmailDeliveryMetricsRow>(
+      SELECT_EMAIL_DELIVERY_METRICS_SQL,
+      [workspaceId],
+    );
+    const recentDeliveryFailuresResult =
+      await client.query<RecentDeliveryFailureRow>(
+        SELECT_RECENT_DELIVERY_FAILURES_SQL,
+        [workspaceId],
+      );
+    const deliveryMetrics = toEmailDeliveryMetrics(
+      deliveryMetricsResult.rows[0],
+    );
 
     return {
       status: "ready",
@@ -63,8 +87,10 @@ export async function loadDashboardData(
         campaigns: campaignsResult.rows[0]?.count ?? 0,
         lists: listsResult.rows[0]?.count ?? 0,
         templates: templatesResult.rows[0]?.count ?? 0,
+        ...deliveryMetrics,
       },
       campaigns: campaignRowsResult.rows,
+      recentDeliveryFailures: recentDeliveryFailuresResult.rows,
       error: null,
     };
   });

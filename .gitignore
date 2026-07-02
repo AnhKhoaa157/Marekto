@@ -23,6 +23,8 @@
 # Documentation & Agent Rules
 AGENTS.md
 CLAUDE.md
+.claude/
+.fable/
 FLOW.md
 MVP.md
 FRONTEND_STRICT_MANIFESTO.md

@@ -586,6 +586,154 @@ export const openApiSpec = {
         },
       },
     },
+    "/api/campaigns/{id}/email-logs": {
+      get: {
+        tags: ["Campaigns"],
+        summary: "Read campaign delivery logs and summary",
+        description:
+          "Tenant-scoped. Returns the campaign basics, a delivery summary derived from real Email_logs rows, and per-recipient log entries joined with workspace contacts. Recipient fields are null when the contact was deleted.",
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "integer", minimum: 1 },
+            description: "Campaign id within the authenticated workspace.",
+          },
+          {
+            name: "limit",
+            in: "query",
+            required: false,
+            schema: { type: "integer", minimum: 1, maximum: 100, default: 50 },
+            description: "Maximum number of log rows to return.",
+          },
+          {
+            name: "cursor",
+            in: "query",
+            required: false,
+            schema: { type: "integer", minimum: 1 },
+            description:
+              "Pagination cursor: returns log rows with id lower than this value (logs are ordered by id descending).",
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Campaign delivery logs and summary.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    data: {
+                      type: "object",
+                      properties: {
+                        campaign: {
+                          type: "object",
+                          properties: {
+                            id: { type: "integer" },
+                            name: { type: "string" },
+                            status: { type: "string" },
+                            failure_reason: { type: "string", nullable: true },
+                            ai_personalization_enabled: { type: "boolean" },
+                            scheduled_at: {
+                              type: "string",
+                              format: "date-time",
+                              nullable: true,
+                            },
+                            run_at: {
+                              type: "string",
+                              format: "date-time",
+                              nullable: true,
+                            },
+                          },
+                        },
+                        summary: {
+                          type: "object",
+                          description:
+                            "Counts derived from Email_logs rows; zero counts when no logs exist.",
+                          properties: {
+                            total_recipients: { type: "integer" },
+                            sent_count: { type: "integer" },
+                            failed_count: { type: "integer" },
+                            gemini_personalized_count: { type: "integer" },
+                            template_sent_count: { type: "integer" },
+                            ai_fallback_count: { type: "integer" },
+                            first_sent_at: {
+                              type: "string",
+                              format: "date-time",
+                              nullable: true,
+                            },
+                            last_sent_at: {
+                              type: "string",
+                              format: "date-time",
+                              nullable: true,
+                            },
+                          },
+                        },
+                        logs: {
+                          type: "array",
+                          items: {
+                            type: "object",
+                            properties: {
+                              id: { type: "integer" },
+                              contact_id: { type: "integer", nullable: true },
+                              recipient_email: { type: "string", nullable: true },
+                              recipient_first_name: { type: "string", nullable: true },
+                              recipient_last_name: { type: "string", nullable: true },
+                              status: { type: "string", enum: ["sent", "failed"] },
+                              error_message: { type: "string", nullable: true },
+                              error_category: {
+                                type: "string",
+                                enum: [
+                                  "none",
+                                  "ai_fallback",
+                                  "smtp_unconfigured",
+                                  "smtp_failure",
+                                  "template_missing",
+                                  "no_recipients",
+                                  "unknown",
+                                ],
+                              },
+                              personalization_source: {
+                                type: "string",
+                                enum: ["gemini", "template"],
+                                nullable: true,
+                              },
+                              personalization_error: {
+                                type: "string",
+                                nullable: true,
+                              },
+                              sent_at: {
+                                type: "string",
+                                format: "date-time",
+                                nullable: true,
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "404": {
+            description: "Campaign not found in this workspace.",
+            content: {
+              "application/json": {
+                schema: { $ref: ERROR_ENVELOPE_REF },
+              },
+            },
+          },
+          "500": { $ref: "#/components/responses/ServerError" },
+        },
+      },
+    },
     "/api/worker/cron": {
       get: {
         tags: ["Worker"],

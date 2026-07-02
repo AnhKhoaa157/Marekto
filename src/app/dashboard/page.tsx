@@ -3,6 +3,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/dashboard/app-shell";
 import type {
   CampaignRow,
+  RecentDeliveryFailureRow,
   ReadyDashboardData,
 } from "@/lib/dashboard";
 import { getServerAuthSession } from "@/lib/server-auth";
@@ -19,6 +20,7 @@ type DashboardData =
       status: "unauthenticated";
       metrics: null;
       campaigns: CampaignRow[];
+      recentDeliveryFailures: RecentDeliveryFailureRow[];
       error: null;
     }
   | ReadyDashboardData
@@ -26,6 +28,7 @@ type DashboardData =
       status: "error";
       metrics: null;
       campaigns: CampaignRow[];
+      recentDeliveryFailures: RecentDeliveryFailureRow[];
       error: string;
     };
 
@@ -55,6 +58,7 @@ async function getDashboardData(searchQuery: string): Promise<DashboardData> {
       status: "unauthenticated",
       metrics: null,
       campaigns: [],
+      recentDeliveryFailures: [],
       error: null,
     };
   }
@@ -70,6 +74,7 @@ async function getDashboardData(searchQuery: string): Promise<DashboardData> {
       status: "error",
       metrics: null,
       campaigns: [],
+      recentDeliveryFailures: [],
       error: message,
     };
   }
@@ -90,6 +95,23 @@ function formatSchedule(campaign: CampaignRow): string {
 
   if (Number.isNaN(date.getTime())) {
     return "Schedule unavailable";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
+
+function formatDeliveryFailureTime(value: Date | string | null): string {
+  if (!value) {
+    return "Time unavailable";
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Time unavailable";
   }
 
   return new Intl.DateTimeFormat("en-US", {
@@ -284,6 +306,89 @@ function MetricsSection({ data }: Readonly<{ data: DashboardData }>) {
   );
 }
 
+function DeliveryMetricsSection({ data }: Readonly<{ data: DashboardData }>) {
+  if (data.status !== "ready") {
+    return (
+      <section
+        aria-label="Email delivery metrics"
+        className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
+      >
+        <DataUnavailableCard
+          title="Emails sent"
+          description="Requires authenticated email log data."
+        />
+        <DataUnavailableCard
+          title="Emails failed"
+          description="Requires authenticated email log data."
+        />
+        <div className="sm:col-span-2">
+          <DataUnavailableCard
+            title="Recent delivery failures"
+            description="Requires authenticated email log data."
+          />
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section
+      aria-label="Email delivery metrics"
+      className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
+    >
+      <MetricCard
+        title="Emails sent"
+        value={formatCount(data.metrics.sentEmails)}
+        description="Derived from Email_logs"
+      />
+      <MetricCard
+        title="Emails failed"
+        value={formatCount(data.metrics.failedEmails)}
+        description="Derived from Email_logs"
+      />
+      <article className="rounded-md border border-zinc-800 bg-zinc-900 p-4 shadow-sm sm:col-span-2">
+        <h2 className="text-sm font-medium text-zinc-400">
+          Recent delivery failures
+        </h2>
+        {data.recentDeliveryFailures.length === 0 ? (
+          <div className="mt-3 rounded-md border border-dashed border-zinc-700 bg-zinc-950 p-4 text-center">
+            <p className="text-sm font-medium text-zinc-200">
+              No failed email logs
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">
+              Failed recipient outcomes will appear here when recorded.
+            </p>
+          </div>
+        ) : (
+          <ul className="mt-3 divide-y divide-zinc-800">
+            {data.recentDeliveryFailures.map((failure) => (
+              <li
+                className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"
+                key={failure.campaign_id}
+              >
+                <div className="min-w-0">
+                  <Link
+                    className="block truncate text-sm font-medium text-zinc-100 outline-none transition-colors hover:text-indigo-300 focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-indigo-400"
+                    href={`/campaigns/${failure.campaign_id}`}
+                  >
+                    {failure.campaign_name}
+                  </Link>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    {formatDeliveryFailureTime(failure.last_failed_at)}
+                  </p>
+                </div>
+                <span className="self-start rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs font-medium text-red-300 sm:self-auto">
+                  {formatCount(failure.failed_count)} failed
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </article>
+    </section>
+  );
+}
+
 function CampaignTable({
   campaigns,
   searchQuery,
@@ -384,6 +489,7 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
     >
       <DashboardStatus data={data} />
       <MetricsSection data={data} />
+      <DeliveryMetricsSection data={data} />
 
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <article className="min-w-0 rounded-md border border-zinc-800 bg-zinc-900 p-4 shadow-sm xl:col-span-2">
