@@ -24,6 +24,7 @@ export const openApiSpec = {
   tags: [
     { name: "Auth", description: "Registration, login, and logout" },
     { name: "Profile", description: "Authenticated user profile" },
+    { name: "AI", description: "Authenticated AI-assisted workflows" },
     { name: "Lists", description: "Contact lists (tenant-scoped)" },
     { name: "Campaigns", description: "Email campaigns (tenant-scoped)" },
     { name: "Worker", description: "Background / system triggers" },
@@ -212,6 +213,50 @@ export const openApiSpec = {
           },
         },
         required: ["name"],
+      },
+      SegmentationRequest: {
+        type: "object",
+        properties: {
+          prompt: {
+            type: "string",
+            minLength: 1,
+            maxLength: 500,
+            description: "Natural-language description of the intended campaign audience.",
+          },
+        },
+        required: ["prompt"],
+      },
+      CampaignTargetFilters: {
+        type: "object",
+        properties: {
+          city: { type: "string" },
+          lead_score_gt: { type: "number", minimum: 0, maximum: 100 },
+          lead_score_gte: { type: "number", minimum: 0, maximum: 100 },
+          lead_score_lt: { type: "number", minimum: 0, maximum: 100 },
+          lead_score_lte: { type: "number", minimum: 0, maximum: 100 },
+          tags_contains: { type: "string" },
+        },
+        additionalProperties: false,
+      },
+      SegmentationResponse: {
+        type: "object",
+        properties: {
+          success: { type: "boolean", example: true },
+          data: {
+            type: "object",
+            properties: {
+              target_filters: { $ref: "#/components/schemas/CampaignTargetFilters" },
+              source: {
+                type: "string",
+                enum: ["gemini", "cache"],
+                description:
+                  "gemini means fresh provider output; cache means a validated exact-match workspace cache was reused because the provider was unavailable.",
+              },
+            },
+            required: ["target_filters", "source"],
+          },
+        },
+        required: ["success", "data"],
       },
     },
     responses: {
@@ -457,6 +502,37 @@ export const openApiSpec = {
             content: {
               "application/json": {
                 schema: { $ref: SUCCESS_ENVELOPE_REF },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "503": { $ref: "#/components/responses/ServerError" },
+          "500": { $ref: "#/components/responses/ServerError" },
+        },
+      },
+    },
+    "/api/ai/segmentation": {
+      post: {
+        tags: ["AI"],
+        summary: "Generate campaign audience filters",
+        description:
+          "Tenant-authenticated. Converts a natural-language audience description into validated campaign target_filters using Gemini 2.5 Flash. No contact records are sent to the AI provider.",
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/SegmentationRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Validated audience filters generated.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/SegmentationResponse" },
               },
             },
           },

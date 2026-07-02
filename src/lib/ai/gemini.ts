@@ -1,5 +1,5 @@
 const GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
-const GEMINI_MODEL = "gemini-2.5-flash";
+export const GEMINI_MODEL = "gemini-2.5-flash";
 const DEFAULT_TIMEOUT_MS = 20_000;
 const FALLBACK_STATUS_CODES = new Set([401, 403, 429]);
 
@@ -34,6 +34,19 @@ type GeminiDependencies = {
   fetchImpl?: typeof fetch;
 };
 
+export class GeminiProviderUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GeminiProviderUnavailableError";
+  }
+}
+
+export function isGeminiProviderUnavailableError(
+  error: unknown,
+): error is GeminiProviderUnavailableError {
+  return error instanceof GeminiProviderUnavailableError;
+}
+
 function parseFallbackKeys(value: string | undefined): string[] {
   return (value ?? "")
     .split(/[;,\r\n]+/)
@@ -61,7 +74,7 @@ export function resolveGeminiConfig(
   const primaryKey = env.GEMINI_API_KEY?.trim();
 
   if (!primaryKey) {
-    throw new Error("GEMINI_API_KEY is required");
+    throw new GeminiProviderUnavailableError("GEMINI_API_KEY is required");
   }
 
   const apiKeys = [primaryKey, ...parseFallbackKeys(env.GEMINI_FALLBACK_API_KEYS)]
@@ -189,7 +202,7 @@ export async function generateGeminiJson(
             continue;
           }
 
-          throw new Error(
+          throw new GeminiProviderUnavailableError(
             `All configured Gemini API keys were rejected or rate-limited. ${lastFallbackError}`,
           );
         }
@@ -201,13 +214,24 @@ export async function generateGeminiJson(
       return parseJsonResponse(extractResponseText(payload));
     } catch (error) {
       if (controller.signal.aborted) {
-        throw new Error(`Gemini request timed out after ${config.timeoutMs}ms`);
+        throw new GeminiProviderUnavailableError(
+          `Gemini request timed out after ${config.timeoutMs}ms`,
+        );
+      }
+
+      if (error instanceof GeminiProviderUnavailableError) {
+        throw error;
       }
 
       const message = sanitizeGeminiError(
         error instanceof Error ? error.message : "Gemini request failed",
         config.apiKeys,
       );
+
+      if (error instanceof TypeError) {
+        throw new GeminiProviderUnavailableError(message);
+      }
+
       throw new Error(message);
     } finally {
       clearTimeout(timeout);

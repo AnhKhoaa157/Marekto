@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  GeminiProviderUnavailableError,
   generateGeminiJson,
+  isGeminiProviderUnavailableError,
   resolveGeminiConfig,
 } from "../src/lib/ai/gemini.ts";
 
@@ -19,6 +21,18 @@ test("resolves one primary key and de-duplicated fallback keys", () => {
       apiKeys: [primaryKey, fallbackKey, "second-fallback"],
       model: "gemini-2.5-flash",
       timeoutMs: 20_000,
+    },
+  );
+});
+
+test("marks missing provider keys as provider unavailable", () => {
+  assert.throws(
+    () => resolveGeminiConfig({}),
+    (error) => {
+      assert.ok(error instanceof GeminiProviderUnavailableError);
+      assert.equal(isGeminiProviderUnavailableError(error), true);
+      assert.match(error.message, /GEMINI_API_KEY is required/);
+      return true;
     },
   );
 });
@@ -77,6 +91,7 @@ test("does not leak configured keys when every key is rejected", async () => {
       },
     ),
     (error) => {
+      assert.ok(isGeminiProviderUnavailableError(error));
       assert.equal(error.message.includes(primaryKey), false);
       assert.equal(error.message.includes(fallbackKey), false);
       assert.match(error.message, /All configured Gemini API keys/);
