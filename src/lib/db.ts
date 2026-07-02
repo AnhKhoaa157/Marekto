@@ -12,7 +12,7 @@
 const REQUIRED_ENV_VARS = ["DATABASE_URL"] as const;
 const INITIALIZATION_TIMEOUT_MS = 60_000;
 const SLOW_QUERY_THRESHOLD_MS = 1_000;
-const MIGRATION_VERSION = "v8_ai_personalization_controls";
+const MIGRATION_VERSION = "v9_email_logs_contact_retention";
 
 type SafeDatabaseConfig = {
   source: "DATABASE_URL";
@@ -307,7 +307,7 @@ CREATE TABLE IF NOT EXISTS "Email_logs" (
   id SERIAL PRIMARY KEY,
   workspace_id INT NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
   campaign_id INT REFERENCES "Campaigns"(id) ON DELETE SET NULL,
-  contact_id INT REFERENCES "Contacts"(id) ON DELETE CASCADE,
+  contact_id INT REFERENCES "Contacts"(id) ON DELETE SET NULL,
   status VARCHAR NOT NULL DEFAULT 'sent',
   error_message TEXT,
   personalization_source VARCHAR(32),
@@ -556,6 +556,28 @@ ALTER TABLE "Email_logs" ADD COLUMN IF NOT EXISTS error_message TEXT;
 -- Phase 10.1: per-recipient AI personalization delivery observability.
 ALTER TABLE "Email_logs" ADD COLUMN IF NOT EXISTS personalization_source VARCHAR(32);
 ALTER TABLE "Email_logs" ADD COLUMN IF NOT EXISTS personalization_error TEXT;
+
+-- Phase 11: delivery logs must survive contact deletion for observability.
+-- Replace any cascading contact FK with ON DELETE SET NULL.
+DO $do$
+DECLARE
+  contact_fk_name TEXT;
+BEGIN
+  SELECT con.conname INTO contact_fk_name
+  FROM pg_constraint con
+  WHERE con.conrelid = '"Email_logs"'::regclass
+    AND con.contype = 'f'
+    AND con.confrelid = '"Contacts"'::regclass
+    AND con.confdeltype = 'c';
+
+  IF contact_fk_name IS NOT NULL THEN
+    EXECUTE format('ALTER TABLE "Email_logs" DROP CONSTRAINT %I', contact_fk_name);
+    ALTER TABLE "Email_logs"
+      ADD CONSTRAINT email_logs_contact_id_fkey
+      FOREIGN KEY (contact_id) REFERENCES "Contacts"(id) ON DELETE SET NULL;
+  END IF;
+END
+$do$;
 ALTER TABLE "Email_logs" ALTER COLUMN status SET DEFAULT 'sent';
 ALTER TABLE "Email_logs" ALTER COLUMN sent_at SET DEFAULT CURRENT_TIMESTAMP;
 ALTER TABLE "Email_logs" ALTER COLUMN campaign_id DROP NOT NULL;

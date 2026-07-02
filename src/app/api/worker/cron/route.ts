@@ -28,6 +28,11 @@ import {
   type MailTransporter,
   type SmtpConfig,
 } from "@/lib/mail/nodemailer";
+import {
+  categorizeWorkerFailure,
+  sanitizeWorkerLogReason,
+  writeWorkerLog,
+} from "@/lib/worker-log";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -231,6 +236,12 @@ async function processClaimedCampaign(
   if (recipients === 0) {
     const outcome = resolveCampaignDeliveryOutcome(0, 0, 0);
     await markCampaignFailed(workspaceId, campaign.id, outcome.reason ?? "No recipients");
+    writeWorkerLog("warn", "campaign_delivery_skipped", {
+      workspaceId,
+      campaignId: campaign.id,
+      category: "no_recipients",
+      reason: outcome.reason,
+    });
 
     return {
       campaign_id: campaign.id,
@@ -244,6 +255,13 @@ async function processClaimedCampaign(
 
   if (!preparedCampaign.emailHtml) {
     const reason = "Campaign email template content is unavailable";
+
+    writeWorkerLog("error", "campaign_delivery_blocked", {
+      workspaceId,
+      campaignId: campaign.id,
+      category: "template_missing",
+      reason,
+    });
 
     for (const contact of preparedCampaign.contacts) {
       await recordEmailLog(
@@ -273,6 +291,15 @@ async function processClaimedCampaign(
   let emailsSent = 0;
   let emailsFailed = 0;
   let firstFailureReason: string | null = setupError;
+
+  if (setupError) {
+    writeWorkerLog("error", "campaign_delivery_blocked", {
+      workspaceId,
+      campaignId: campaign.id,
+      category: "smtp_unconfigured",
+      reason: setupError,
+    });
+  }
 
   for (const contact of preparedCampaign.contacts) {
     if (setupError || !transporter || !config) {
@@ -310,6 +337,16 @@ async function processClaimedCampaign(
       personalizationSource = emailContent.source;
       personalizationError = emailContent.personalizationError;
 
+      if (personalizationError) {
+        writeWorkerLog("warn", "recipient_personalization_fallback", {
+          workspaceId,
+          campaignId: campaign.id,
+          contactId: contact.id,
+          category: "ai_personalization_fallback",
+          reason: personalizationError,
+        });
+      }
+
       await sendCampaignEmail(
         {
           to: contact.email,
@@ -332,12 +369,23 @@ async function processClaimedCampaign(
       );
     } catch (error) {
       const deliveryFailure = sanitizeMailError(error);
+      const failureCategory =
+        personalizationSource === null
+          ? categorizeWorkerFailure(error)
+          : "smtp_send_failed";
       const failureReason = personalizationError
         ? `${deliveryFailure}; AI personalization fallback was used: ${personalizationError}`
         : deliveryFailure;
 
       firstFailureReason ??= failureReason;
       emailsFailed += 1;
+      writeWorkerLog("error", "recipient_delivery_failed", {
+        workspaceId,
+        campaignId: campaign.id,
+        contactId: contact.id,
+        category: failureCategory,
+        reason: failureReason,
+      });
       await recordEmailLog(
         workspaceId,
         campaign.id,
@@ -367,6 +415,18 @@ async function processClaimedCampaign(
     await markCampaignFailed(workspaceId, campaign.id, persistedFailureReason);
   }
 
+  writeWorkerLog(
+    outcome.status === "sent" ? "info" : "warn",
+    "campaign_delivery_completed",
+    {
+      workspaceId,
+      campaignId: campaign.id,
+      ...(outcome.status === "failed"
+        ? { category: "campaign_failed" as const, reason: persistedFailureReason }
+        : {}),
+    },
+  );
+
   return {
     campaign_id: campaign.id,
     recipients,
@@ -390,13 +450,14 @@ async function processWorkspace(workspaceId: number): Promise<WorkspaceResult> {
     try {
       campaigns.push(await processClaimedCampaign(workspaceId, campaign));
     } catch (error) {
-      const failureMessage =
-        error instanceof Error ? error.message : "Campaign processing failed";
+      const failureMessage = sanitizeWorkerLogReason(error);
 
-      console.error(
-        `[worker] Failed to process campaign ${campaign.id} in workspace ${workspaceId}:`,
-        error,
-      );
+      writeWorkerLog("error", "campaign_processing_failed", {
+        workspaceId,
+        campaignId: campaign.id,
+        category: categorizeWorkerFailure(error),
+        reason: error,
+      });
 
       await markCampaignFailed(workspaceId, campaign.id, failureMessage);
       campaigns.push({
@@ -456,10 +517,11 @@ async function runCronWorker(request: NextRequest) {
       try {
         results.push(await processWorkspace(workspace_id));
       } catch (workspaceError) {
-        console.error(
-          `[worker] Failed to process workspace ${workspace_id}:`,
-          workspaceError,
-        );
+        writeWorkerLog("error", "workspace_processing_failed", {
+          workspaceId: workspace_id,
+          category: "workspace_failed",
+          reason: workspaceError,
+        });
       }
     }
 
@@ -493,10 +555,12 @@ async function runCronWorker(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("Failed to run cron worker:", error);
+    writeWorkerLog("error", "worker_run_failed", {
+      category: "worker_failed",
+      reason: error,
+    });
 
-    const message =
-      error instanceof Error ? error.message : "Failed to run cron worker";
+    const message = sanitizeWorkerLogReason(error);
 
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }

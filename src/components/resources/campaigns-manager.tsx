@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 
@@ -707,6 +708,12 @@ export function CampaignsManager() {
                           </div>
                         ) : (
                           <div className="flex justify-end gap-2">
+                            <Link
+                              className="inline-flex h-9 items-center rounded-md border border-zinc-700 px-3 text-sm font-medium text-zinc-300 outline-none transition-colors hover:bg-zinc-800 hover:text-zinc-50 focus-visible:ring-2 focus-visible:ring-indigo-400"
+                              href={`/campaigns/${campaign.id}`}
+                            >
+                              View
+                            </Link>
                             <button
                               className="h-9 rounded-md border border-zinc-700 px-3 text-sm font-medium text-zinc-300 outline-none transition-colors hover:bg-zinc-800 hover:text-zinc-50 focus-visible:ring-2 focus-visible:ring-indigo-400 disabled:cursor-not-allowed disabled:border-zinc-800 disabled:text-zinc-600 disabled:hover:bg-transparent"
                               disabled={
