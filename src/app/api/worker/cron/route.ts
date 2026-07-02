@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { resolveCampaignDeliveryContent } from "@/lib/ai/personalization";
 import {
   buildContactSelection,
   parseCampaignTargetFilters,
@@ -9,10 +10,12 @@ import {
   CLAIM_CAMPAIGN_SQL,
   CLAIM_LEASE_MINUTES,
   FAILED_STATUS,
+  INSERT_EMAIL_LOG_SQL,
   PENDING_STATUS,
   PROCESSING_STATUS,
   SENT_STATUS,
   resolveCampaignDeliveryOutcome,
+  type EmailPersonalizationSource,
 } from "@/lib/campaign-worker";
 import { authorizeCronRequest } from "@/lib/cron-auth";
 import { initializeDatabase, query, withWorkspace } from "@/lib/db";
@@ -45,10 +48,6 @@ const MARK_CAMPAIGN_SENT_SQL =
   "failure_reason = NULL, updated_at = NOW() " +
   "WHERE id = $2 AND workspace_id = $3 AND status = $4";
 
-const INSERT_EMAIL_LOG_SQL =
-  'INSERT INTO "Email_logs" (workspace_id, campaign_id, contact_id, status, error_message) ' +
-  "VALUES ($1, $2, $3, $4, $5)";
-
 type WorkspaceRow = {
   workspace_id: number;
 };
@@ -59,11 +58,15 @@ type ClaimedCampaignRow = {
   template_id: number | null;
   name: string;
   target_filters: CampaignTargetFilters | null;
+  ai_personalization_enabled: boolean;
 };
 
 type ContactRow = {
   id: number;
   email: string;
+  first_name: string | null;
+  last_name: string | null;
+  properties: unknown;
 };
 
 type TemplateRow = {
@@ -145,6 +148,8 @@ async function recordEmailLog(
   contactId: number,
   status: "sent" | "failed",
   errorMessage: string | null,
+  personalizationSource: EmailPersonalizationSource | null,
+  personalizationError: string | null,
 ): Promise<void> {
   await withWorkspace(workspaceId, async (client) => {
     await client.query(INSERT_EMAIL_LOG_SQL, [
@@ -153,6 +158,8 @@ async function recordEmailLog(
       contactId,
       status,
       errorMessage,
+      personalizationSource,
+      personalizationError,
     ]);
   });
 }
@@ -239,7 +246,15 @@ async function processClaimedCampaign(
     const reason = "Campaign email template content is unavailable";
 
     for (const contact of preparedCampaign.contacts) {
-      await recordEmailLog(workspaceId, campaign.id, contact.id, "failed", reason);
+      await recordEmailLog(
+        workspaceId,
+        campaign.id,
+        contact.id,
+        "failed",
+        reason,
+        null,
+        null,
+      );
     }
 
     await markCampaignFailed(workspaceId, campaign.id, reason);
@@ -268,24 +283,58 @@ async function processClaimedCampaign(
         contact.id,
         "failed",
         setupError ?? "SMTP delivery is not configured",
+        null,
+        null,
       );
       continue;
     }
 
+    let personalizationSource: EmailPersonalizationSource | null = null;
+    let personalizationError: string | null = null;
+
     try {
+      const emailContent = await resolveCampaignDeliveryContent(
+        {
+          campaign: { name: campaign.name },
+          template: { bodyHtml: preparedCampaign.emailHtml },
+          contact: {
+            email: contact.email,
+            firstName: contact.first_name,
+            lastName: contact.last_name,
+            properties: contact.properties,
+          },
+        },
+        campaign.ai_personalization_enabled,
+      );
+
+      personalizationSource = emailContent.source;
+      personalizationError = emailContent.personalizationError;
+
       await sendCampaignEmail(
         {
           to: contact.email,
-          subject: campaign.name,
-          html: preparedCampaign.emailHtml,
+          subject: emailContent.subject,
+          html: emailContent.html,
+          ...(emailContent.text !== null ? { text: emailContent.text } : {}),
         },
         transporter,
         config,
       );
       emailsSent += 1;
-      await recordEmailLog(workspaceId, campaign.id, contact.id, "sent", null);
+      await recordEmailLog(
+        workspaceId,
+        campaign.id,
+        contact.id,
+        "sent",
+        null,
+        personalizationSource,
+        personalizationError,
+      );
     } catch (error) {
-      const failureReason = sanitizeMailError(error);
+      const deliveryFailure = sanitizeMailError(error);
+      const failureReason = personalizationError
+        ? `${deliveryFailure}; AI personalization fallback was used: ${personalizationError}`
+        : deliveryFailure;
 
       firstFailureReason ??= failureReason;
       emailsFailed += 1;
@@ -295,6 +344,8 @@ async function processClaimedCampaign(
         contact.id,
         "failed",
         failureReason,
+        personalizationSource,
+        personalizationError,
       );
     }
   }
