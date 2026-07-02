@@ -398,12 +398,6 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
               <Link
-                className="inline-flex h-9 items-center justify-center rounded-md border border-zinc-700 px-3 text-sm font-medium text-zinc-300 outline-none transition-colors hover:bg-zinc-800 hover:text-zinc-50 focus-visible:ring-2 focus-visible:ring-indigo-400"
-                href="/api-docs"
-              >
-                API docs
-              </Link>
-              <Link
                 className="inline-flex h-9 items-center justify-center rounded-md bg-indigo-600 px-3 text-sm font-medium text-white outline-none transition-colors hover:bg-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-400"
                 href="/campaigns"
               >
