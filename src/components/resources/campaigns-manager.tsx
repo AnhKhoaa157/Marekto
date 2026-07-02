@@ -17,7 +17,8 @@ import {
 
 type CampaignStatus = "draft" | "pending" | "processing" | "sent" | "failed";
 type DeliveryPlan = "draft" | "schedule";
-type AudienceMode = "all" | "saved";
+type AudienceMode = "all" | "ai";
+type AudienceSource = "gemini" | "cache";
 type SchedulePreset =
   | "custom"
   | "tomorrow-morning"
@@ -40,6 +41,11 @@ type CampaignRow = {
 type TemplateOption = {
   id: number;
   name: string;
+};
+
+type SegmentationResult = {
+  targetFilters: Record<string, unknown>;
+  source: AudienceSource;
 };
 
 function parseNullableDate(value: unknown): string | null {
@@ -120,32 +126,65 @@ function parseTemplateOptions(value: unknown): TemplateOption[] {
   return value.map(parseTemplateOption);
 }
 
-function parseTargetFilters(value: string): Record<string, unknown> {
-  let parsed: unknown;
-
-  try {
-    parsed = JSON.parse(value || "{}");
-  } catch {
-    throw new Error("Target filters must contain valid JSON.");
-  }
-
-  if (!isRecord(parsed)) {
-    throw new Error("Target filters must be a JSON object.");
-  }
-
-  return parsed;
-}
-
 function hasAudienceFilters(filters: Record<string, unknown>): boolean {
   return Object.keys(filters).length > 0;
 }
 
-function hasStoredAudienceFilters(value: string): boolean {
-  try {
-    return hasAudienceFilters(parseTargetFilters(value));
-  } catch {
-    return false;
+function parseAudienceSource(value: unknown): AudienceSource {
+  if (value === "gemini" || value === "cache") {
+    return value;
   }
+
+  throw new Error("The AI audience response contains an invalid source.");
+}
+
+function parseSegmentationResult(value: unknown): SegmentationResult {
+  if (!isRecord(value) || !isRecord(value.target_filters)) {
+    throw new Error("The AI audience response has an invalid shape.");
+  }
+
+  if (!hasAudienceFilters(value.target_filters)) {
+    throw new Error("The AI audience response did not contain any rules.");
+  }
+
+  return {
+    targetFilters: value.target_filters,
+    source: parseAudienceSource(value.source),
+  };
+}
+
+function formatAudienceFilter(key: string, value: unknown): string {
+  const displayValue =
+    typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+      ? String(value)
+      : "unsupported value";
+
+  if (key === "city") {
+    return `City is ${displayValue}`;
+  }
+
+  if (key === "lead_score_gt") {
+    return `Lead score is above ${displayValue}`;
+  }
+
+  if (key === "lead_score_gte") {
+    return `Lead score is at least ${displayValue}`;
+  }
+
+  if (key === "lead_score_lt") {
+    return `Lead score is below ${displayValue}`;
+  }
+
+  if (key === "lead_score_lte") {
+    return `Lead score is at most ${displayValue}`;
+  }
+
+  if (key === "tags_contains") {
+    return `Includes tag ${displayValue}`;
+  }
+
+  const label = key.replaceAll("_", " ");
+  return `${label.charAt(0).toUpperCase()}${label.slice(1)} is ${displayValue}`;
 }
 
 function getDeliveryPlan(status: CampaignStatus): DeliveryPlan {
@@ -276,12 +315,16 @@ export function CampaignsManager() {
   const [scheduleDate, setScheduleDate] = useState("");
   const [scheduleTime, setScheduleTime] = useState("");
   const [audienceMode, setAudienceMode] = useState<AudienceMode>("all");
-  const [targetFilters, setTargetFilters] = useState("{}");
+  const [audiencePrompt, setAudiencePrompt] = useState("");
+  const [audienceSource, setAudienceSource] = useState<AudienceSource | null>(null);
+  const [targetFilters, setTargetFilters] = useState<Record<string, unknown>>({});
+  const [audienceError, setAudienceError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGeneratingAudience, setIsGeneratingAudience] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<number | null>(null);
 
@@ -366,7 +409,10 @@ export function CampaignsManager() {
     setScheduleDate("");
     setScheduleTime("");
     setAudienceMode("all");
-    setTargetFilters("{}");
+    setAudiencePrompt("");
+    setAudienceSource(null);
+    setTargetFilters({});
+    setAudienceError(null);
     setActionError(null);
   }
 
@@ -380,8 +426,11 @@ export function CampaignsManager() {
     setSchedulePreset("custom");
     setScheduleDate(dateParts.date);
     setScheduleTime(dateParts.time);
-    setAudienceMode(hasAudienceFilters(campaign.target_filters) ? "saved" : "all");
-    setTargetFilters(JSON.stringify(campaign.target_filters, null, 2));
+    setAudienceMode(hasAudienceFilters(campaign.target_filters) ? "ai" : "all");
+    setAudiencePrompt("");
+    setAudienceSource(null);
+    setTargetFilters(campaign.target_filters);
+    setAudienceError(null);
     setActionError(null);
     setSuccess(null);
     setConfirmingDeleteId(null);
@@ -411,6 +460,57 @@ export function CampaignsManager() {
     setScheduleTime(presetDate.time);
   }
 
+  function handleAudienceModeChange(mode: AudienceMode) {
+    setAudienceMode(mode);
+    setAudienceError(null);
+    setActionError(null);
+
+    if (mode === "all") {
+      setAudienceSource(null);
+    }
+  }
+
+  async function handleGenerateAudience() {
+    const prompt = audiencePrompt.trim();
+
+    if (!prompt) {
+      setAudienceError("Describe the audience you want to reach.");
+      return;
+    }
+
+    setAudienceError(null);
+    setActionError(null);
+    setSuccess(null);
+    setIsGeneratingAudience(true);
+
+    try {
+      const result = await requestApi(
+        "/api/ai/segmentation",
+        {
+          method: "POST",
+          body: JSON.stringify({ prompt }),
+        },
+        parseSegmentationResult,
+      );
+
+      setTargetFilters(result.targetFilters);
+      setAudienceSource(result.source);
+    } catch (generateError) {
+      if (generateError instanceof ApiRequestError && generateError.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
+      setAudienceError(
+        generateError instanceof Error
+          ? generateError.message
+          : "Unable to generate audience rules.",
+      );
+    } finally {
+      setIsGeneratingAudience(false);
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setActionError(null);
@@ -428,12 +528,17 @@ export function CampaignsManager() {
       return;
     }
 
+    if (audienceMode === "ai" && !hasAudienceFilters(targetFilters)) {
+      setActionError("Generate audience rules before saving this campaign.");
+      return;
+    }
+
     setIsSubmitting(true);
 
     const editingId = editingCampaign?.id;
 
     try {
-      const filters = audienceMode === "all" ? {} : parseTargetFilters(targetFilters);
+      const filters = audienceMode === "all" ? {} : targetFilters;
       const scheduledAt =
         deliveryPlan === "schedule" ? buildScheduledAt(scheduleDate, scheduleTime) : null;
 
@@ -515,8 +620,6 @@ export function CampaignsManager() {
 
     return templates.find((template) => template.id === id)?.name ?? "Template unavailable";
   }
-
-  const hasSavedAudienceOption = hasStoredAudienceFilters(targetFilters);
 
   return (
     <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
@@ -760,20 +863,135 @@ export function CampaignsManager() {
             </label>
             <select
               className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-50 outline-none transition-colors hover:border-zinc-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30"
+              disabled={isGeneratingAudience}
               id="campaign-audience"
-              onChange={(event) => setAudienceMode(event.target.value as AudienceMode)}
+              onChange={(event) =>
+                handleAudienceModeChange(event.target.value as AudienceMode)
+              }
               value={audienceMode}
             >
               <option value="all">All contacts in this workspace</option>
-              {hasSavedAudienceOption ? (
-                <option value="saved">Saved custom audience</option>
-              ) : null}
+              <option value="ai">Build a targeted audience with AI</option>
             </select>
             <p className="text-xs text-zinc-500">
-              AI audience builder is coming next. For now, new campaigns target all
-              real contacts in this workspace.
+              {audienceMode === "all"
+                ? "Every real contact in this workspace will be eligible."
+                : "Describe who should receive this campaign, then review the generated rules."}
             </p>
           </div>
+          {audienceMode === "ai" ? (
+            <div className="space-y-3 rounded-md border border-zinc-800 bg-zinc-950 p-3">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <label
+                    className="text-sm font-medium text-zinc-200"
+                    htmlFor="campaign-audience-prompt"
+                  >
+                    Audience description
+                  </label>
+                  <span className="text-xs text-zinc-500">
+                    {audiencePrompt.length}/500
+                  </span>
+                </div>
+                <textarea
+                  aria-describedby="campaign-audience-help"
+                  className="min-h-24 w-full resize-y rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 hover:border-zinc-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 disabled:cursor-not-allowed disabled:text-zinc-500"
+                  disabled={isGeneratingAudience}
+                  id="campaign-audience-prompt"
+                  maxLength={500}
+                  onChange={(event) => {
+                    setAudiencePrompt(event.target.value);
+
+                    if (hasAudienceFilters(targetFilters)) {
+                      setTargetFilters({});
+                      setAudienceSource(null);
+                    }
+
+                    setAudienceError(null);
+                  }}
+                  placeholder="For example: VIP customers in HCM with a lead score above 80"
+                  value={audiencePrompt}
+                />
+                <p className="text-xs text-zinc-500" id="campaign-audience-help">
+                  Marekto converts this description into validated rules. Contact records
+                  are not sent to the AI provider.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <button
+                  className="h-10 flex-1 rounded-md bg-indigo-600 px-4 text-sm font-medium text-white outline-none transition-colors hover:bg-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-400 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
+                  disabled={isGeneratingAudience || audiencePrompt.trim().length === 0}
+                  onClick={() => void handleGenerateAudience()}
+                  type="button"
+                >
+                  {isGeneratingAudience
+                    ? "Generating audience..."
+                    : hasAudienceFilters(targetFilters)
+                      ? "Regenerate audience"
+                      : "Generate audience"}
+                </button>
+                {hasAudienceFilters(targetFilters) ? (
+                  <button
+                    className="h-10 rounded-md border border-zinc-700 px-4 text-sm font-medium text-zinc-300 outline-none transition-colors hover:bg-zinc-800 focus-visible:ring-2 focus-visible:ring-indigo-400 disabled:cursor-not-allowed disabled:text-zinc-600"
+                    disabled={isGeneratingAudience}
+                    onClick={() => {
+                      setTargetFilters({});
+                      setAudienceSource(null);
+                      setAudienceError(null);
+                    }}
+                    type="button"
+                  >
+                    Clear rules
+                  </button>
+                ) : null}
+              </div>
+              {audienceError ? (
+                <p className="text-sm text-red-300" role="alert">
+                  {audienceError}
+                </p>
+              ) : null}
+              {hasAudienceFilters(targetFilters) ? (
+                <div
+                  aria-live="polite"
+                  className="space-y-2 border-t border-zinc-800 pt-3"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-zinc-200">Audience rules</p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      All generated rules must match.
+                    </p>
+                  </div>
+                  {audienceSource ? (
+                    <p
+                      className={
+                        audienceSource === "cache"
+                          ? "rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-200"
+                          : "rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-200"
+                      }
+                    >
+                      {audienceSource === "cache"
+                        ? "AI is unavailable. Marekto reused saved audience rules from this workspace."
+                        : "Audience rules generated by Gemini and saved for this workspace."}
+                    </p>
+                  ) : (
+                    <p className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-400">
+                      These saved rules came from this campaign. Regenerate to refresh them.
+                    </p>
+                  )}
+                  <ul className="flex flex-wrap gap-2">
+                    {Object.entries(targetFilters).map(([key, value]) => (
+                      <li
+                        className="max-w-full break-words rounded-md border border-indigo-500/30 bg-indigo-500/10 px-2 py-1 text-xs font-medium text-indigo-200"
+                        key={key}
+                      >
+                        {formatAudienceFilter(key, value)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           {actionError ? (
             <p className="text-sm text-red-300" role="alert">
               {actionError}
@@ -786,8 +1004,12 @@ export function CampaignsManager() {
           ) : null}
           <div className="flex flex-col gap-2 sm:flex-row">
             <button
-              className="h-10 flex-1 rounded-md bg-indigo-600 px-4 text-sm font-medium text-white outline-none transition-colors hover:bg-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-400 disabled:bg-zinc-800 disabled:text-zinc-500"
-              disabled={isSubmitting}
+              className="h-10 flex-1 rounded-md bg-indigo-600 px-4 text-sm font-medium text-white outline-none transition-colors hover:bg-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-400 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
+              disabled={
+                isSubmitting ||
+                isGeneratingAudience ||
+                (audienceMode === "ai" && !hasAudienceFilters(targetFilters))
+              }
               type="submit"
             >
               {isSubmitting

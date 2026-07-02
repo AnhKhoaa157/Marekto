@@ -12,7 +12,7 @@
 const REQUIRED_ENV_VARS = ["DATABASE_URL"] as const;
 const INITIALIZATION_TIMEOUT_MS = 60_000;
 const SLOW_QUERY_THRESHOLD_MS = 1_000;
-const MIGRATION_VERSION = "v6_user_profile_fields";
+const MIGRATION_VERSION = "v7_ai_outputs_cache";
 
 type SafeDatabaseConfig = {
   source: "DATABASE_URL";
@@ -312,6 +312,23 @@ CREATE TABLE IF NOT EXISTS "Email_logs" (
   sent_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS "Ai_outputs" (
+  id SERIAL PRIMARY KEY,
+  workspace_id INT NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
+  feature VARCHAR NOT NULL,
+  input_hash VARCHAR NOT NULL,
+  input_text TEXT NOT NULL,
+  output_json JSONB NOT NULL,
+  provider VARCHAR NOT NULL,
+  model VARCHAR NOT NULL,
+  status VARCHAR NOT NULL DEFAULT 'generated',
+  created_by INT REFERENCES "Users"(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT ai_outputs_status_check
+    CHECK (status IN ('generated', 'approved', 'stale'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_workspaces_owner_id ON "Workspaces"(owner_id);
 CREATE INDEX IF NOT EXISTS idx_workspace_members_workspace_id ON "Workspace_members"(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_workspace_members_user_id ON "Workspace_members"(user_id);
@@ -331,6 +348,12 @@ CREATE INDEX IF NOT EXISTS idx_email_logs_campaign_id ON "Email_logs"(campaign_i
 CREATE INDEX IF NOT EXISTS idx_email_logs_contact_id ON "Email_logs"(contact_id);
 CREATE INDEX IF NOT EXISTS idx_contacts_properties_gin ON "Contacts" USING GIN (properties);
 CREATE INDEX IF NOT EXISTS idx_campaigns_target_filters_gin ON "Campaigns" USING GIN (target_filters);
+CREATE INDEX IF NOT EXISTS idx_ai_outputs_workspace_feature
+  ON "Ai_outputs"(workspace_id, feature);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_outputs_workspace_feature_input_hash_unique
+  ON "Ai_outputs"(workspace_id, feature, input_hash);
+CREATE INDEX IF NOT EXISTS idx_ai_outputs_output_json_gin
+  ON "Ai_outputs" USING GIN (output_json);
 
 ALTER TABLE "Users" ADD COLUMN IF NOT EXISTS first_name VARCHAR;
 ALTER TABLE "Users" ADD COLUMN IF NOT EXISTS last_name VARCHAR;
@@ -544,6 +567,74 @@ ALTER TABLE "Email_logs" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Email_logs" FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS email_logs_workspace_isolation ON "Email_logs";
 CREATE POLICY email_logs_workspace_isolation ON "Email_logs"
+  USING (
+    workspace_id = COALESCE(NULLIF(current_setting('app.current_workspace_id', true), ''), '0')::INT
+  )
+  WITH CHECK (
+    workspace_id = COALESCE(NULLIF(current_setting('app.current_workspace_id', true), ''), '0')::INT
+  );
+
+-- Phase 6.1: Tenant-scoped AI output cache for validated provider results.
+ALTER TABLE "Ai_outputs" ADD COLUMN IF NOT EXISTS workspace_id INT REFERENCES "Workspaces"(id) ON DELETE CASCADE;
+ALTER TABLE "Ai_outputs" ADD COLUMN IF NOT EXISTS feature VARCHAR;
+ALTER TABLE "Ai_outputs" ADD COLUMN IF NOT EXISTS input_hash VARCHAR;
+ALTER TABLE "Ai_outputs" ADD COLUMN IF NOT EXISTS input_text TEXT;
+ALTER TABLE "Ai_outputs" ADD COLUMN IF NOT EXISTS output_json JSONB;
+ALTER TABLE "Ai_outputs" ADD COLUMN IF NOT EXISTS provider VARCHAR;
+ALTER TABLE "Ai_outputs" ADD COLUMN IF NOT EXISTS model VARCHAR;
+ALTER TABLE "Ai_outputs" ADD COLUMN IF NOT EXISTS status VARCHAR NOT NULL DEFAULT 'generated';
+ALTER TABLE "Ai_outputs" ADD COLUMN IF NOT EXISTS created_by INT REFERENCES "Users"(id) ON DELETE SET NULL;
+ALTER TABLE "Ai_outputs" ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE "Ai_outputs" ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
+
+DO $do$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM "Ai_outputs"
+    WHERE workspace_id IS NULL
+      OR feature IS NULL
+      OR input_hash IS NULL
+      OR input_text IS NULL
+      OR output_json IS NULL
+      OR provider IS NULL
+      OR model IS NULL
+      OR status IS NULL
+  ) THEN
+    RAISE EXCEPTION 'Incomplete AI output cache row detected; repair it before migration';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'ai_outputs_status_check'
+  ) THEN
+    ALTER TABLE "Ai_outputs"
+      ADD CONSTRAINT ai_outputs_status_check
+      CHECK (status IN ('generated', 'approved', 'stale'));
+  END IF;
+END
+$do$;
+
+ALTER TABLE "Ai_outputs" ALTER COLUMN workspace_id SET NOT NULL;
+ALTER TABLE "Ai_outputs" ALTER COLUMN feature SET NOT NULL;
+ALTER TABLE "Ai_outputs" ALTER COLUMN input_hash SET NOT NULL;
+ALTER TABLE "Ai_outputs" ALTER COLUMN input_text SET NOT NULL;
+ALTER TABLE "Ai_outputs" ALTER COLUMN output_json SET NOT NULL;
+ALTER TABLE "Ai_outputs" ALTER COLUMN provider SET NOT NULL;
+ALTER TABLE "Ai_outputs" ALTER COLUMN model SET NOT NULL;
+ALTER TABLE "Ai_outputs" ALTER COLUMN status SET NOT NULL;
+ALTER TABLE "Ai_outputs" ALTER COLUMN created_at SET NOT NULL;
+ALTER TABLE "Ai_outputs" ALTER COLUMN updated_at SET NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_ai_outputs_workspace_feature
+  ON "Ai_outputs"(workspace_id, feature);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_outputs_workspace_feature_input_hash_unique
+  ON "Ai_outputs"(workspace_id, feature, input_hash);
+CREATE INDEX IF NOT EXISTS idx_ai_outputs_output_json_gin
+  ON "Ai_outputs" USING GIN (output_json);
+
+ALTER TABLE "Ai_outputs" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Ai_outputs" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS ai_outputs_workspace_isolation ON "Ai_outputs";
+CREATE POLICY ai_outputs_workspace_isolation ON "Ai_outputs"
   USING (
     workspace_id = COALESCE(NULLIF(current_setting('app.current_workspace_id', true), ''), '0')::INT
   )

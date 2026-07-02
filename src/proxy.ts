@@ -14,6 +14,7 @@ import { authenticateTenantRequest } from "@/lib/proxy-auth";
  */
 export const config = {
   matcher: [
+    "/api/ai/:path*",
     "/api/lists/:path*",
     "/api/templates/:path*",
     "/api/campaigns/:path*",
