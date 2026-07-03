@@ -456,35 +456,6 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
       activeRoute="/dashboard"
       authenticated={hasSession}
       eyebrow="Marketing command center"
-      headerActions={
-        <form action="/dashboard" className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <label className="sr-only" htmlFor="dashboard-search">
-            Search campaigns
-          </label>
-          <input
-            className="h-10 rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 hover:border-zinc-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 disabled:text-zinc-500 sm:w-72"
-            defaultValue={searchQuery}
-            disabled={!hasSession}
-            id="dashboard-search"
-            name="q"
-            placeholder={
-              hasSession ? "Search real campaigns" : "Search after signing in"
-            }
-            type="search"
-          />
-          <button
-            className={
-              hasSession
-                ? "h-10 rounded-md bg-indigo-600 px-4 text-sm font-medium text-white outline-none transition-colors hover:bg-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-400"
-                : "h-10 rounded-md border border-zinc-800 bg-zinc-900 px-4 text-sm font-medium text-zinc-500 outline-none"
-            }
-            disabled={!hasSession}
-            type="submit"
-          >
-            Search
-          </button>
-        </form>
-      }
       title="Dashboard overview"
     >
       <DashboardStatus data={data} />
@@ -493,7 +464,7 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
 
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <article className="min-w-0 rounded-md border border-zinc-800 bg-zinc-900 p-4 shadow-sm xl:col-span-2">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-zinc-50">
                 Campaign pipeline
@@ -502,7 +473,7 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
                 Real campaign records from the authenticated workspace.
               </p>
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <Link
                 className="inline-flex h-9 items-center justify-center rounded-md bg-indigo-600 px-3 text-sm font-medium text-white outline-none transition-colors hover:bg-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-400"
                 href="/campaigns"
@@ -518,6 +489,60 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
                 Export report
               </button>
             </div>
+          </div>
+
+          <div className="mt-4 rounded-md border border-zinc-800 bg-zinc-950 p-3">
+            <form
+              action="/dashboard"
+              className="flex flex-col gap-3 lg:flex-row lg:items-end"
+            >
+              <div className="min-w-0 flex-1 space-y-2">
+                <label
+                  className="text-xs font-medium uppercase tracking-wide text-zinc-500"
+                  htmlFor="dashboard-campaign-filter"
+                >
+                  Filter campaign names
+                </label>
+                <input
+                  className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 hover:border-zinc-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 disabled:text-zinc-500"
+                  defaultValue={searchQuery}
+                  disabled={!hasSession}
+                  id="dashboard-campaign-filter"
+                  name="q"
+                  placeholder={
+                    hasSession ? "Search by campaign name" : "Sign in to filter campaigns"
+                  }
+                  type="search"
+                />
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <button
+                  className={
+                    hasSession
+                      ? "h-10 rounded-md bg-indigo-600 px-4 text-sm font-medium text-white outline-none transition-colors hover:bg-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-400"
+                      : "h-10 rounded-md border border-zinc-800 bg-zinc-900 px-4 text-sm font-medium text-zinc-500 outline-none"
+                  }
+                  disabled={!hasSession}
+                  type="submit"
+                >
+                  Filter
+                </button>
+                {searchQuery ? (
+                  <Link
+                    className="inline-flex h-10 items-center justify-center rounded-md border border-zinc-700 px-4 text-sm font-medium text-zinc-300 outline-none transition-colors hover:bg-zinc-800 hover:text-zinc-50 focus-visible:ring-2 focus-visible:ring-indigo-400"
+                    href="/dashboard"
+                  >
+                    Clear
+                  </Link>
+                ) : null}
+              </div>
+            </form>
+            {searchQuery ? (
+              <p className="mt-2 text-xs text-zinc-500">
+                Showing campaigns matching{" "}
+                <span className="font-medium text-zinc-300">“{searchQuery}”</span>.
+              </p>
+            ) : null}
           </div>
 
           <CampaignTable
