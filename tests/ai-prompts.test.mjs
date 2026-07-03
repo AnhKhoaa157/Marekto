@@ -28,8 +28,7 @@ const SEGMENTATION_FIELDS = [
 
 test("segmentation prompt exposes an explicit name and version", () => {
   assert.equal(SEGMENTATION_PROMPT_NAME, "segmentation_v1");
-  assert.equal(typeof SEGMENTATION_PROMPT_VERSION, "string");
-  assert.ok(SEGMENTATION_PROMPT_VERSION.length > 0);
+  assert.equal(SEGMENTATION_PROMPT_VERSION, "1.1.0");
 });
 
 test("personalization prompt exposes an explicit name and version", () => {
@@ -52,6 +51,50 @@ test("segmentation instruction forbids SQL, explanations, and unsupported keys",
     SEGMENTATION_SYSTEM_INSTRUCTION,
     /Never add explanations, SQL, contact records, or unsupported keys\./,
   );
+});
+
+test("segmentation instruction defines the meaning of every allowed field", () => {
+  assert.match(SEGMENTATION_SYSTEM_INSTRUCTION, /Allowed fields:/);
+
+  for (const field of SEGMENTATION_FIELDS) {
+    assert.match(SEGMENTATION_SYSTEM_INSTRUCTION, new RegExp(`- ${field}:`));
+  }
+
+  assert.match(SEGMENTATION_SYSTEM_INSTRUCTION, /Conditions are combined with AND/);
+});
+
+test("segmentation instruction maps common marketing phrases to safe filters", () => {
+  assert.match(
+    SEGMENTATION_SYSTEM_INSTRUCTION,
+    /VIP customers -> \{\"tags_contains\":\"VIP\"\}/,
+  );
+  assert.match(
+    SEGMENTATION_SYSTEM_INSTRUCTION,
+    /customers in HCM -> \{\"city\":\"HCM\"\}/,
+  );
+  assert.match(
+    SEGMENTATION_SYSTEM_INSTRUCTION,
+    /lead score over 80 -> \{\"lead_score_gt\":80\}/,
+  );
+});
+
+test("segmentation instruction rejects unsupported concepts without guessing", () => {
+  assert.match(
+    SEGMENTATION_SYSTEM_INSTRUCTION,
+    /high intent customers -> \{\} because high intent has no supported field/,
+  );
+  assert.match(
+    SEGMENTATION_SYSTEM_INSTRUCTION,
+    /If no supported filter remains, return \{\} so the application can reject the request/,
+  );
+  assert.match(
+    SEGMENTATION_SYSTEM_INSTRUCTION,
+    /Prefer fewer, safer filters over guessed filters/,
+  );
+
+  for (const unsupportedField of ["revenue", "last_purchase_date", "industry"]) {
+    assert.ok(SEGMENTATION_SYSTEM_INSTRUCTION.includes(unsupportedField));
+  }
 });
 
 test("segmentation request builder is testable without calling Gemini", () => {

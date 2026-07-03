@@ -1,0 +1,446 @@
+{
+  "info": {
+    "_postman_id": "4c54bb3e-5e55-4b75-a73b-bb47d17d7c37",
+    "name": "Marekto Backend API",
+    "description": "Canonical backend contract. Review and update this collection after every backend logic change, then run npm run postman:check. Never store real credentials or production tenant data here.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{authToken}}", "type": "string" }]
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test(\"Response is JSON\", function () {",
+          "  pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+          "});",
+          "if (!pm.request.url.getPath().endsWith(\"/api/openapi.json\")) {",
+          "  pm.test(\"Response uses the success envelope\", function () {",
+          "    const payload = pm.response.json();",
+          "    pm.expect(payload.success).to.be.a(\"boolean\");",
+          "    if (payload.success) pm.expect(payload).to.have.property(\"data\");",
+          "    else pm.expect(payload.error).to.be.a(\"string\");",
+          "  });",
+          "}",
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "authToken", "value": "" },
+    { "key": "cronSecret", "value": "" },
+    { "key": "registrationEmail", "value": "postman@example.com" },
+    { "key": "registrationPassword", "value": "ChangeMe123!" },
+    { "key": "registrationOtp", "value": "" },
+    { "key": "workspaceName", "value": "Postman Workspace" },
+    { "key": "userId", "value": "" },
+    { "key": "workspaceId", "value": "" },
+    { "key": "contactId", "value": "1" },
+    { "key": "listId", "value": "1" },
+    { "key": "templateId", "value": "1" },
+    { "key": "campaignId", "value": "1" },
+    { "key": "emailLogLimit", "value": "50" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Start registration",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{registrationEmail}}\",\n  \"password\": \"{{registrationPassword}}\",\n  \"workspaceName\": \"{{workspaceName}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/auth/register",
+            "description": "Sends a real OTP. Expected success status: 202."
+          }
+        },
+        {
+          "name": "Verify registration OTP",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "if (pm.response.code === 201) {",
+                "  const data = pm.response.json().data;",
+                "  pm.collectionVariables.set(\"authToken\", data.token);",
+                "  pm.collectionVariables.set(\"userId\", String(data.userId));",
+                "  pm.collectionVariables.set(\"workspaceId\", String(data.workspaceId));",
+                "}"
+              ]
+            }
+          }],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{registrationEmail}}\",\n  \"otp\": \"{{registrationOtp}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/auth/register/verify"
+          }
+        },
+        {
+          "name": "Login",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "if (pm.response.code === 200) {",
+                "  const data = pm.response.json().data;",
+                "  pm.collectionVariables.set(\"authToken\", data.token);",
+                "  pm.collectionVariables.set(\"userId\", String(data.userId));",
+                "  pm.collectionVariables.set(\"workspaceId\", String(data.workspaceId));",
+                "}"
+              ]
+            }
+          }],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{registrationEmail}}\",\n  \"password\": \"{{registrationPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/auth/login"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/auth/logout"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Profile",
+      "item": [
+        {
+          "name": "Get profile",
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/profile" }
+        },
+        {
+          "name": "Update profile",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Postman\",\n  \"last_name\": \"Tester\",\n  \"phone\": \"+84000000000\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/profile"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Contacts",
+      "item": [
+        {
+          "name": "List contacts",
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/contacts" }
+        },
+        {
+          "name": "Create contact",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "if (pm.response.code === 201) pm.collectionVariables.set(\"contactId\", String(pm.response.json().data.id));"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"contact.postman@example.com\",\n  \"first_name\": \"An\",\n  \"last_name\": \"Nguyen\",\n  \"phone\": \"+84000000001\",\n  \"properties\": {\"city\": \"HCM\", \"lead_score\": 92, \"tags\": [\"VIP\"]}\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/contacts"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Lists",
+      "item": [
+        {
+          "name": "List contact lists",
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/lists" }
+        },
+        {
+          "name": "Create contact list",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "if (pm.response.code === 201) pm.collectionVariables.set(\"listId\", String(pm.response.json().data.id));"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman VIP list\",\n  \"description\": \"Created from the canonical collection\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/lists"
+          }
+        },
+        {
+          "name": "Update contact list",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Postman VIP list\",\n  \"description\": \"Updated through Postman\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/lists/{{listId}}"
+          }
+        },
+        {
+          "name": "Delete contact list",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/lists/{{listId}}",
+            "description": "Destructive request."
+          }
+        },
+        {
+          "name": "List contacts in list",
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/lists/{{listId}}/contacts" }
+        },
+        {
+          "name": "Add contact to list",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contact_id\": {{contactId}}\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/lists/{{listId}}/contacts"
+          }
+        },
+        {
+          "name": "Remove contact from list",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/lists/{{listId}}/contacts?contact_id={{contactId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Templates",
+      "item": [
+        {
+          "name": "List templates",
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/templates" }
+        },
+        {
+          "name": "Create template",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "if (pm.response.code === 201) pm.collectionVariables.set(\"templateId\", String(pm.response.json().data.id));"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman welcome template\",\n  \"body_html\": \"<html><body><p>Hello from Marekto.</p><p><a href='https://example.com/unsubscribe'>Unsubscribe</a></p></body></html>\",\n  \"body_json\": {}\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/templates"
+          }
+        },
+        {
+          "name": "Update template",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Postman template\",\n  \"body_html\": \"<html><body><p>Updated template.</p><p><a href='https://example.com/unsubscribe'>Unsubscribe</a></p></body></html>\",\n  \"body_json\": {}\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/templates/{{templateId}}"
+          }
+        },
+        {
+          "name": "Delete template",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/templates/{{templateId}}",
+            "description": "Destructive request."
+          }
+        }
+      ]
+    },
+    {
+      "name": "AI",
+      "item": [
+        {
+          "name": "Generate audience filters",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prompt\": \"VIP customers in HCM with lead score over 80\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/ai/segmentation"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Campaigns",
+      "item": [
+        {
+          "name": "List campaigns",
+          "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/campaigns" }
+        },
+        {
+          "name": "Create draft campaign",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "if (pm.response.code === 201) pm.collectionVariables.set(\"campaignId\", String(pm.response.json().data.id));"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman draft campaign\",\n  \"template_id\": {{templateId}},\n  \"status\": \"draft\",\n  \"target_filters\": {\"city\": \"HCM\", \"lead_score_gt\": 80, \"tags_contains\": \"VIP\"},\n  \"ai_personalization_enabled\": false\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/campaigns",
+            "description": "Creates a draft so running the collection cannot accidentally send email."
+          }
+        },
+        {
+          "name": "Update campaign",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Postman draft campaign\",\n  \"target_filters\": {\"city\": \"HCM\"},\n  \"ai_personalization_enabled\": false\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/api/campaigns/{{campaignId}}"
+          }
+        },
+        {
+          "name": "Delete campaign",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/campaigns/{{campaignId}}",
+            "description": "Destructive request."
+          }
+        },
+        {
+          "name": "Get campaign email logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/campaigns/{{campaignId}}/email-logs?limit={{emailLogLimit}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Worker",
+      "item": [
+        {
+          "name": "Trigger worker (POST)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{cronSecret}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/worker/cron",
+            "description": "Warning: may send real email for due pending campaigns."
+          }
+        },
+        {
+          "name": "Trigger worker (GET compatibility)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{cronSecret}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/worker/cron",
+            "description": "Warning: may send real email for due pending campaigns."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Meta",
+      "item": [
+        {
+          "name": "Get OpenAPI document",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/openapi.json"
+          }
+        }
+      ]
+    }
+  ]
+}
