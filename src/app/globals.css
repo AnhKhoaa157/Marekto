@@ -25,6 +25,43 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
+.marekto-scrollbar {
+  scrollbar-color: rgba(113, 113, 122, 0.55) rgba(24, 24, 27, 0.35);
+  scrollbar-width: thin;
+}
+
+.marekto-scrollbar::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+.marekto-scrollbar::-webkit-scrollbar-track {
+  background: rgba(24, 24, 27, 0.35);
+  border-radius: 999px;
+}
+
+.marekto-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    rgba(161, 161, 170, 0.7),
+    rgba(82, 82, 91, 0.85)
+  );
+  border: 2px solid rgba(9, 9, 11, 0.95);
+  border-radius: 999px;
+}
+
+.marekto-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    rgba(199, 210, 254, 0.9),
+    rgba(99, 102, 241, 0.85)
+  );
+}
+
+.marekto-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /*
  * Decorative grid backdrop for the public marketing homepage hero.
  * Expressed as a reusable utility class because Tailwind has no token for a

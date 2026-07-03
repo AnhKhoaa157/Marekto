@@ -40,9 +40,9 @@ export function AppShell({
   const showHeaderControls = Boolean(headerActions) || authenticated;
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-zinc-950 text-zinc-50">
-      <div className="flex min-h-screen flex-col lg:flex-row">
-        <aside className="border-b border-zinc-800 bg-zinc-950 px-4 py-4 lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:self-start lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-6 lg:py-6">
+    <main className="h-screen overflow-hidden bg-zinc-950 text-zinc-50">
+      <div className="flex h-full min-h-0 flex-col lg:flex-row">
+        <aside className="marekto-scrollbar shrink-0 overflow-y-auto border-b border-zinc-800 bg-zinc-950 px-4 py-4 lg:h-full lg:w-64 lg:border-b-0 lg:border-r lg:px-6 lg:py-6">
           <div className="flex items-center justify-between gap-4 lg:block">
             <div>
               <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
@@ -83,8 +83,8 @@ export function AppShell({
           </nav>
         </aside>
 
-        <section className="flex min-w-0 flex-1 flex-col">
-          <header className="border-b border-zinc-800 bg-zinc-950/95 px-4 py-4 sm:px-6">
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <header className="shrink-0 border-b border-zinc-800 bg-zinc-950/95 px-4 py-4 sm:px-6">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
               <div>
                 <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
@@ -104,7 +104,9 @@ export function AppShell({
             </div>
           </header>
 
-          <div className="flex-1 space-y-6 px-4 py-6 sm:px-6">{children}</div>
+          <div className="marekto-scrollbar min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-6 sm:px-6">
+            {children}
+          </div>
         </section>
       </div>
     </main>

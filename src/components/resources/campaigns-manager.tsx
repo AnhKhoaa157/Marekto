@@ -752,7 +752,7 @@ export function CampaignsManager() {
         </div>
       </article>
 
-      <aside className="min-w-0 rounded-md border border-zinc-800 bg-zinc-900 p-4 shadow-sm xl:sticky xl:top-6 xl:max-h-[calc(100vh-3rem)] xl:overflow-y-auto">
+      <aside className="marekto-scrollbar min-w-0 rounded-md border border-zinc-800 bg-zinc-900 p-4 shadow-sm [scrollbar-gutter:stable] xl:sticky xl:top-6 xl:max-h-[calc(100vh-3rem)] xl:overflow-y-auto">
         <h2 className="text-lg font-semibold text-zinc-50">
           {editingCampaign ? "Edit campaign" : "Create campaign"}
         </h2>
