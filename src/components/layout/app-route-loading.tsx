@@ -1,4 +1,4 @@
-import { AppShell, type AppRoute } from "@/components/dashboard/app-shell";
+import { AppShell, type AppRoute } from "@/components/layout/app-shell";
 
 type AppRouteLoadingProps = {
   activeRoute: AppRoute;

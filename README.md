@@ -4,7 +4,7 @@
     <img src="public/logo/full/full-logo.png" alt="Marekto" width="520">
   </picture>
 
-  <p><strong>AI-powered, multi-tenant marketing automation — from audience intent to real delivery.</strong></p>
+  <p><strong>AI Marketing Workspace - plan, segment, create, send, and track personalized campaigns from real workspace data.</strong></p>
 
   <p>
     <img alt="Next.js" src="https://img.shields.io/badge/Next.js-16-000000?logo=next.js">
@@ -24,9 +24,11 @@
 
 ---
 
-Marekto is a full-stack marketing platform for managing contacts, building AI-assisted audiences, scheduling campaigns, personalizing email per recipient, and delivering through real SMTP infrastructure. Workspace isolation is enforced with PostgreSQL Row-Level Security—not merely application-side filtering.
+Marekto is an AI Marketing Workspace that helps teams plan, segment, create, send, and track personalized email campaigns from real workspace contact data. It combines campaign planning, AI-assisted audience building, reusable templates, scheduling, recipient-level personalization, and real SMTP delivery inside a multi-tenant workspace model. Workspace isolation is enforced with PostgreSQL Row-Level Security, not merely application-side filtering.
 
 > **Truth over theatre.** Production screens use real API/database data, delivery logs represent real outcomes, and AI failures never create invented business results.
+
+The next product direction is AI Campaign Builder: a review-first workflow that turns a campaign idea into a campaign brief, audience explanation, validated target filters, subject ideas, email HTML draft, AI personalization context, and schedule notes. Builder output must still be reviewed by a user and saved through the existing Template and Campaign draft flows; it must never auto-send or invent delivery results.
 
 <div align="center">
   <img src="public/readme/marekto-ai-pipeline.png" alt="Marekto AI marketing pipeline from contacts through segmentation and personalized email delivery" width="100%">
@@ -36,9 +38,11 @@ Marekto is a full-stack marketing platform for managing contacts, building AI-as
 ## What Marekto does
 
 ```text
-Contact data
+Campaign idea + contact data
    ↓
 Workspace-isolated PostgreSQL storage
+   ↓
+AI Campaign Builder direction
    ↓
 Natural-language audience request
    ↓
@@ -71,6 +75,7 @@ Real sent / failed delivery logs
 
 ### Still on the roadmap
 
+- AI Campaign Builder for campaign briefs, audience plans, email drafts, and draft creation
 - AI lead scoring and contact enrichment
 - Campaign-specific AI context such as goal, tone, CTA, and language
 - Workspace-level brand voice settings

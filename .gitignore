@@ -12,8 +12,11 @@
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
+/blob-report/
 
-# local API tooling
+# local project tooling
 /scripts/
 
 # next.js
@@ -24,36 +27,46 @@
 /build
 
 # Documentation & Agent Rules
-AGENTS.md
-CLAUDE.md
+/AGENTS.md
+/CLAUDE.md
+/.agents/
 .claude/
 .fable/
-FLOW.md
-MVP.md
-FRONTEND_STRICT_MANIFESTO.md
-MISSION.md
-PHASE_REPAIR_BACKLOG.md
-PROJECT_OVERVIEW.md
-PROJECT_WORKTREE.md
+/FLOW.md
+/MVP.md
+/FRONTEND_STRICT_MANIFESTO.md
+/MISSION.md
+/PHASE_REPAIR_BACKLOG.md
+/PROJECT_OVERVIEW.md
+/PROJECT_WORKTREE.md
 /docs/
 
 # Sensitive local Markdown reports
-BACKEND_FINAL_AUDIT_REPORT.md
-*_AUDIT_REPORT.md
-*_FINAL_AUDIT_REPORT.md
+/BACKEND_FINAL_AUDIT_REPORT.md
+/*_AUDIT_REPORT.md
+/*_FINAL_AUDIT_REPORT.md
 
 # misc
 .DS_Store
 *.pem
 
 # debug
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
+.env
+.env.local
+.env.*.local
 .env*
+!.env.example
+
+# local caches
+/.cache/
+/.turbo/
 
 # vercel
 .vercel

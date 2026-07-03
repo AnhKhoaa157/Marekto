@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { CampaignEmailLogs } from "@/components/resources/campaign-email-logs";
+import { CampaignEmailLogs } from "@/features/campaigns/components/campaign-email-logs";
 
 type CampaignDetailProps = {
   campaignId: number;

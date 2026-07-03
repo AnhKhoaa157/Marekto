@@ -1,14 +1,15 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { SignOutButton } from "@/components/auth/sign-out-button";
-import { NavLink } from "@/components/dashboard/nav-link";
+import { SignOutButton } from "@/features/auth/components/sign-out-button";
+import { NavLink } from "@/components/layout/nav-link";
 
 export type AppRoute =
   | "/dashboard"
   | "/contacts"
   | "/lists"
   | "/campaigns"
+  | "/campaign-builder"
   | "/templates"
   | "/profile";
 
@@ -26,6 +27,7 @@ const navigationItems: ReadonlyArray<{ href: AppRoute; label: string }> = [
   { href: "/contacts", label: "Contacts" },
   { href: "/lists", label: "Lists" },
   { href: "/campaigns", label: "Campaigns" },
+  { href: "/campaign-builder", label: "Campaign Builder" },
   { href: "/templates", label: "Templates" },
   { href: "/profile", label: "Profile" },
 ];

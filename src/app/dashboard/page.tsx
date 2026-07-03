@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { AppShell } from "@/components/dashboard/app-shell";
+import { AppShell } from "@/components/layout/app-shell";
 import type {
   CampaignRow,
   RecentDeliveryFailureRow,
