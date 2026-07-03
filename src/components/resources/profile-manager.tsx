@@ -174,6 +174,12 @@ export function ProfileManager() {
     }
   }
 
+  const isDirty = profile
+    ? formState.firstName !== (profile.first_name ?? "") ||
+      formState.lastName !== (profile.last_name ?? "") ||
+      formState.phone !== (profile.phone ?? "")
+    : false;
+
   return (
     <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
       <article className="min-w-0 rounded-md border border-zinc-800 bg-zinc-900 p-4 shadow-sm xl:col-span-2">
@@ -261,10 +267,23 @@ export function ProfileManager() {
                 </div>
               ) : null}
 
-              <div className="flex justify-end">
+              <div className="flex flex-col justify-end gap-2 sm:flex-row">
+                {isDirty && profile ? (
+                  <button
+                    className="h-10 rounded-md border border-zinc-700 px-4 text-sm font-medium text-zinc-300 outline-none transition-colors hover:bg-zinc-800 focus-visible:ring-2 focus-visible:ring-indigo-400"
+                    onClick={() => {
+                      setFormState(getFormState(profile));
+                      setActionError(null);
+                      setSuccess(null);
+                    }}
+                    type="button"
+                  >
+                    Reset changes
+                  </button>
+                ) : null}
                 <button
                   className="h-10 rounded-md bg-indigo-600 px-4 text-sm font-medium text-white outline-none transition-colors hover:bg-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-400 disabled:bg-zinc-800 disabled:text-zinc-500"
-                  disabled={isSaving}
+                  disabled={isSaving || !isDirty}
                   type="submit"
                 >
                   {isSaving ? "Saving changes..." : "Save changes"}

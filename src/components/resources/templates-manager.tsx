@@ -162,6 +162,11 @@ export function TemplatesManager() {
       return;
     }
 
+    if (!bodyHtml.trim()) {
+      setActionError("Template HTML content is required.");
+      return;
+    }
+
     setIsSubmitting(true);
     const editingId = editingTemplate?.id;
 
@@ -256,7 +261,7 @@ export function TemplatesManager() {
             />
           ) : null}
           {!isLoading && !loadError && templates.length > 0 ? (
-            <div className="overflow-x-auto">
+            <div className="marekto-scrollbar overflow-x-auto">
               <table className="w-full min-w-full text-left text-sm">
                 <thead className="border-b border-zinc-800 text-xs font-medium uppercase tracking-wide text-zinc-500">
                   <tr>
@@ -359,16 +364,48 @@ export function TemplatesManager() {
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-200" htmlFor="template-html">
-              HTML content
-            </label>
+            <div className="flex items-center justify-between gap-3">
+              <label className="text-sm font-medium text-zinc-200" htmlFor="template-html">
+                HTML content
+              </label>
+              <span className="text-xs text-zinc-600">
+                {bodyHtml.length.toLocaleString()} characters
+              </span>
+            </div>
             <textarea
-              className="min-h-40 w-full resize-y rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 font-mono text-sm text-zinc-50 outline-none transition-colors hover:border-zinc-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30"
+              aria-describedby="template-html-help"
+              className="min-h-64 w-full resize-y rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 font-mono text-sm text-zinc-50 outline-none transition-colors hover:border-zinc-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30"
               id="template-html"
               onChange={(event) => setBodyHtml(event.target.value)}
+              placeholder="<!doctype html>..."
               value={bodyHtml}
             />
+            <p className="text-xs leading-5 text-zinc-500" id="template-html-help">
+              Include the real CTA URL plus unsubscribe, legal, and footer content.
+              AI personalization is instructed to preserve those links.
+            </p>
           </div>
+          <section className="overflow-hidden rounded-md border border-zinc-800 bg-zinc-950">
+            <div className="border-b border-zinc-800 px-3 py-2">
+              <h3 className="text-sm font-medium text-zinc-200">Safe preview</h3>
+              <p className="mt-1 text-xs text-zinc-500">
+                Scripts and browser privileges are disabled in this preview.
+              </p>
+            </div>
+            {bodyHtml.trim() ? (
+              <iframe
+                className="h-72 w-full bg-white"
+                referrerPolicy="no-referrer"
+                sandbox=""
+                srcDoc={bodyHtml}
+                title="Email template preview"
+              />
+            ) : (
+              <div className="flex h-40 items-center justify-center p-4 text-center text-sm text-zinc-500">
+                Add HTML content to preview the email.
+              </div>
+            )}
+          </section>
           {actionError ? (
             <p className="text-sm text-red-300" role="alert">
               {actionError}

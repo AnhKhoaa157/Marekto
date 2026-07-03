@@ -74,6 +74,32 @@ function getContactName(contact: ContactRow): string {
   return [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Not provided";
 }
 
+function parseContactProperties(value: FormDataEntryValue | null): Record<string, unknown> {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return {};
+  }
+
+  const parsed: unknown = JSON.parse(value);
+
+  if (!isRecord(parsed)) {
+    throw new Error("Contact properties must be a JSON object.");
+  }
+
+  return parsed;
+}
+
+function formatPropertyValue(value: unknown): string {
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(String).join(", ");
+  }
+
+  return "Structured value";
+}
+
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function ContactsManager() {
@@ -158,6 +184,17 @@ export function ContactsManager() {
       return;
     }
 
+    let properties: Record<string, unknown>;
+
+    try {
+      properties = parseContactProperties(formData.get("properties"));
+    } catch (error) {
+      setActionError(
+        error instanceof Error ? error.message : "Contact properties must be valid JSON.",
+      );
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -170,6 +207,7 @@ export function ContactsManager() {
             first_name: formData.get("first_name"),
             last_name: formData.get("last_name"),
             phone: formData.get("phone"),
+            properties,
           }),
         },
         parseContact,
@@ -221,7 +259,7 @@ export function ContactsManager() {
             />
           ) : null}
           {!isLoading && !loadError && contacts.length > 0 ? (
-            <div className="overflow-x-auto">
+            <div className="marekto-scrollbar overflow-x-auto">
               <table className="w-full min-w-full text-left text-sm">
                 <thead className="border-b border-zinc-800 text-xs font-medium uppercase tracking-wide text-zinc-500">
                   <tr>
@@ -235,7 +273,22 @@ export function ContactsManager() {
                   {contacts.map((contact) => (
                     <tr key={contact.id}>
                       <td className="py-4 pr-4 font-medium text-zinc-100">
-                        {getContactName(contact)}
+                        <p>{getContactName(contact)}</p>
+                        {Object.keys(contact.properties).length > 0 ? (
+                          <div className="mt-2 flex max-w-sm flex-wrap gap-1.5">
+                            {Object.entries(contact.properties)
+                              .slice(0, 3)
+                              .map(([key, value]) => (
+                                <span
+                                  className="max-w-full truncate rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs font-normal text-zinc-400"
+                                  key={key}
+                                  title={`${key}: ${formatPropertyValue(value)}`}
+                                >
+                                  {key}: {formatPropertyValue(value)}
+                                </span>
+                              ))}
+                          </div>
+                        ) : null}
                       </td>
                       <td className="py-4 pr-4 text-zinc-300">{contact.email}</td>
                       <td className="py-4 pr-4 text-zinc-400">
@@ -261,6 +314,21 @@ export function ContactsManager() {
           <ContactInput label="First name" name="first_name" />
           <ContactInput label="Last name" name="last_name" />
           <ContactInput label="Phone" name="phone" type="tel" />
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-zinc-200" htmlFor="contact-properties">
+              Properties JSON
+            </label>
+            <textarea
+              aria-describedby="contact-properties-help"
+              className="min-h-28 w-full resize-y rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 font-mono text-sm text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 hover:border-zinc-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30"
+              id="contact-properties"
+              name="properties"
+              placeholder={'{"city":"HCM","lead_score":82,"tags":["VIP"]}'}
+            />
+            <p className="text-xs leading-5 text-zinc-500" id="contact-properties-help">
+              Optional attributes used by audience filters and email personalization.
+            </p>
+          </div>
           {actionError ? (
             <p className="text-sm text-red-300" role="alert">
               {actionError}
