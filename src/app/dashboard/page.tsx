@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/dashboard/app-shell";
 import type {
@@ -44,6 +45,8 @@ const metricLabels = {
   lists: "Contact lists",
   templates: "Email templates",
 };
+
+const UNAVAILABLE_REASON = "Requires an authenticated tenant session.";
 
 function parseSearchQuery(value: string | string[] | undefined): string {
   const rawValue = Array.isArray(value) ? value[0] : value;
@@ -138,19 +141,40 @@ function statusClassName(status: string): string {
   return "border-amber-500/30 bg-amber-500/10 text-amber-300";
 }
 
+function SectionHeading({
+  title,
+  description,
+}: Readonly<{
+  title: string;
+  description: string;
+}>) {
+  return (
+    <div>
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
+        {title}
+      </h2>
+      <p className="mt-1 text-sm text-zinc-500">{description}</p>
+    </div>
+  );
+}
+
 function MetricCard({
   title,
   value,
   description,
+  valueClassName = "text-zinc-50",
 }: Readonly<{
   title: string;
   value: string;
   description: string;
+  valueClassName?: string;
 }>) {
   return (
-    <article className="rounded-md border border-zinc-800 bg-zinc-900 p-4 shadow-sm">
+    <article className="flex flex-col rounded-md border border-zinc-800 bg-zinc-900 p-4 shadow-sm">
       <p className="text-sm text-zinc-400">{title}</p>
-      <p className="mt-3 text-3xl font-semibold tracking-tight text-zinc-50">
+      <p
+        className={`mt-3 text-3xl font-semibold tracking-tight ${valueClassName}`}
+      >
         {value}
       </p>
       <p className="mt-2 text-xs font-medium text-zinc-500">{description}</p>
@@ -158,17 +182,19 @@ function MetricCard({
   );
 }
 
-function DataUnavailableCard({
+function UnavailableMetricCard({
   title,
-  description,
+  description = UNAVAILABLE_REASON,
 }: Readonly<{
   title: string;
-  description: string;
+  description?: string;
 }>) {
   return (
-    <article className="rounded-md border border-zinc-800 bg-zinc-900 p-4 shadow-sm">
+    <article className="flex flex-col rounded-md border border-zinc-800 bg-zinc-900 p-4 shadow-sm">
       <p className="text-sm text-zinc-400">{title}</p>
-      <p className="mt-3 text-lg font-semibold text-zinc-50">Data unavailable</p>
+      <p className="mt-3 text-3xl font-semibold tracking-tight text-zinc-600">
+        —
+      </p>
       <p className="mt-2 text-xs font-medium text-zinc-500">{description}</p>
     </article>
   );
@@ -185,7 +211,7 @@ function DashboardStatus({ data }: Readonly<{ data: DashboardData }>) {
           Live tenant data connected
         </h3>
         <p className="mt-1 text-sm text-emerald-100/80">
-          Metrics and campaign records are loaded from the authenticated
+          Metrics and campaign records below are loaded from your authenticated
           workspace.
         </p>
       </section>
@@ -203,11 +229,14 @@ function DashboardStatus({ data }: Readonly<{ data: DashboardData }>) {
             <h3 className="text-base font-semibold text-red-200">
               Dashboard data could not be loaded
             </h3>
-            <p className="mt-1 text-sm text-red-100/80">{data.error}</p>
+            <p className="mt-1 text-sm text-red-100/80">
+              Something interrupted the workspace data request. Retry, and if it
+              keeps failing, check the workspace connection.
+            </p>
           </div>
           <Link
             href="/dashboard"
-            className="inline-flex h-9 items-center justify-center rounded-md border border-red-400/40 px-3 text-sm font-medium text-red-100 outline-none transition-colors hover:bg-red-400/10 focus-visible:ring-2 focus-visible:ring-red-300"
+            className="inline-flex h-9 shrink-0 items-center justify-center rounded-md border border-red-400/40 px-3 text-sm font-medium text-red-100 outline-none transition-colors hover:bg-red-400/10 focus-visible:ring-2 focus-visible:ring-red-300"
           >
             Retry
           </Link>
@@ -250,142 +279,219 @@ function DashboardStatus({ data }: Readonly<{ data: DashboardData }>) {
   );
 }
 
-function MetricsSection({ data }: Readonly<{ data: DashboardData }>) {
-  if (data.status !== "ready") {
-    return (
-      <section
-        aria-label="Dashboard metrics"
-        className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
-      >
-        <DataUnavailableCard
-          title={metricLabels.contacts}
-          description="Requires an authenticated tenant session."
-        />
-        <DataUnavailableCard
-          title={metricLabels.campaigns}
-          description="Requires an authenticated tenant session."
-        />
-        <DataUnavailableCard
-          title={metricLabels.lists}
-          description="Requires an authenticated tenant session."
-        />
-        <DataUnavailableCard
-          title={metricLabels.templates}
-          description="Requires an authenticated tenant session."
-        />
-      </section>
-    );
-  }
-
+function WorkspaceMetrics({ data }: Readonly<{ data: DashboardData }>) {
   return (
-    <section
-      aria-label="Dashboard metrics"
-      className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
-    >
-      <MetricCard
-        title={metricLabels.contacts}
-        value={formatCount(data.metrics.contacts)}
-        description="Loaded from Contacts"
+    <section aria-label="Workspace overview" className="space-y-4">
+      <SectionHeading
+        title="Workspace overview"
+        description="Record counts across the authenticated workspace."
       />
-      <MetricCard
-        title={metricLabels.campaigns}
-        value={formatCount(data.metrics.campaigns)}
-        description="Loaded from Campaigns"
-      />
-      <MetricCard
-        title={metricLabels.lists}
-        value={formatCount(data.metrics.lists)}
-        description="Loaded from Lists"
-      />
-      <MetricCard
-        title={metricLabels.templates}
-        value={formatCount(data.metrics.templates)}
-        description="Loaded from Templates"
-      />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {data.status === "ready" ? (
+          <>
+            <MetricCard
+              title={metricLabels.contacts}
+              value={formatCount(data.metrics.contacts)}
+              description="Loaded from Contacts"
+            />
+            <MetricCard
+              title={metricLabels.campaigns}
+              value={formatCount(data.metrics.campaigns)}
+              description="Loaded from Campaigns"
+            />
+            <MetricCard
+              title={metricLabels.lists}
+              value={formatCount(data.metrics.lists)}
+              description="Loaded from Lists"
+            />
+            <MetricCard
+              title={metricLabels.templates}
+              value={formatCount(data.metrics.templates)}
+              description="Loaded from Templates"
+            />
+          </>
+        ) : (
+          <>
+            <UnavailableMetricCard title={metricLabels.contacts} />
+            <UnavailableMetricCard title={metricLabels.campaigns} />
+            <UnavailableMetricCard title={metricLabels.lists} />
+            <UnavailableMetricCard title={metricLabels.templates} />
+          </>
+        )}
+      </div>
     </section>
   );
 }
 
-function DeliveryMetricsSection({ data }: Readonly<{ data: DashboardData }>) {
-  if (data.status !== "ready") {
-    return (
-      <section
-        aria-label="Email delivery metrics"
-        className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
-      >
-        <DataUnavailableCard
-          title="Emails sent"
-          description="Requires authenticated email log data."
-        />
-        <DataUnavailableCard
-          title="Emails failed"
-          description="Requires authenticated email log data."
-        />
-        <div className="sm:col-span-2">
-          <DataUnavailableCard
-            title="Recent delivery failures"
-            description="Requires authenticated email log data."
-          />
-        </div>
-      </section>
-    );
-  }
+function DeliveryMetrics({ data }: Readonly<{ data: DashboardData }>) {
+  const hasFailures =
+    data.status === "ready" && data.metrics.failedEmails > 0;
 
   return (
-    <section
-      aria-label="Email delivery metrics"
-      className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
-    >
-      <MetricCard
-        title="Emails sent"
-        value={formatCount(data.metrics.sentEmails)}
-        description="Derived from Email_logs"
+    <section aria-label="Email delivery" className="space-y-4">
+      <SectionHeading
+        title="Email delivery"
+        description="Send outcomes derived from workspace email logs."
       />
-      <MetricCard
-        title="Emails failed"
-        value={formatCount(data.metrics.failedEmails)}
-        description="Derived from Email_logs"
-      />
-      <article className="rounded-md border border-zinc-800 bg-zinc-900 p-4 shadow-sm sm:col-span-2">
-        <h2 className="text-sm font-medium text-zinc-400">
-          Recent delivery failures
-        </h2>
-        {data.recentDeliveryFailures.length === 0 ? (
-          <div className="mt-3 rounded-md border border-dashed border-zinc-700 bg-zinc-950 p-4 text-center">
-            <p className="text-sm font-medium text-zinc-200">
-              No failed email logs
-            </p>
-            <p className="mt-1 text-xs text-zinc-500">
-              Failed recipient outcomes will appear here when recorded.
-            </p>
-          </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {data.status === "ready" ? (
+          <>
+            <MetricCard
+              title="Emails sent"
+              value={formatCount(data.metrics.sentEmails)}
+              description="Derived from Email_logs"
+            />
+            <MetricCard
+              title="Emails failed"
+              value={formatCount(data.metrics.failedEmails)}
+              description="Derived from Email_logs"
+              valueClassName={
+                hasFailures ? "text-red-300" : "text-zinc-50"
+              }
+            />
+          </>
         ) : (
-          <ul className="mt-3 divide-y divide-zinc-800">
-            {data.recentDeliveryFailures.map((failure) => (
-              <li
-                className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"
-                key={failure.campaign_id}
-              >
-                <div className="min-w-0">
-                  <Link
-                    className="block truncate text-sm font-medium text-zinc-100 outline-none transition-colors hover:text-indigo-300 focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-indigo-400"
-                    href={`/campaigns/${failure.campaign_id}`}
-                  >
-                    {failure.campaign_name}
-                  </Link>
-                  <p className="mt-1 text-xs text-zinc-500">
-                    {formatDeliveryFailureTime(failure.last_failed_at)}
-                  </p>
-                </div>
-                <span className="self-start rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs font-medium text-red-300 sm:self-auto">
-                  {formatCount(failure.failed_count)} failed
-                </span>
-              </li>
-            ))}
-          </ul>
+          <>
+            <UnavailableMetricCard
+              title="Emails sent"
+              description="Requires authenticated email log data."
+            />
+            <UnavailableMetricCard
+              title="Emails failed"
+              description="Requires authenticated email log data."
+            />
+          </>
         )}
-      </article>
+      </div>
+
+      <RecentFailuresCard data={data} />
     </section>
+  );
+}
+
+function RecentFailuresCard({ data }: Readonly<{ data: DashboardData }>) {
+  return (
+    <article className="rounded-md border border-zinc-800 bg-zinc-900 p-4 shadow-sm">
+      <h3 className="text-sm font-medium text-zinc-300">
+        Recent delivery failures
+      </h3>
+
+      {data.status !== "ready" ? (
+        <div className="mt-3 rounded-md border border-dashed border-zinc-700 bg-zinc-950 p-4 text-center">
+          <p className="text-sm font-medium text-zinc-200">
+            Delivery failures unavailable
+          </p>
+          <p className="mt-1 text-xs text-zinc-500">
+            Requires authenticated email log data.
+          </p>
+        </div>
+      ) : data.recentDeliveryFailures.length === 0 ? (
+        <div className="mt-3 rounded-md border border-dashed border-zinc-700 bg-zinc-950 p-4 text-center">
+          <p className="text-sm font-medium text-zinc-200">
+            No failed email logs yet
+          </p>
+          <p className="mt-1 text-xs text-zinc-500">
+            Failed recipient outcomes will appear here when the worker records
+            them.
+          </p>
+        </div>
+      ) : (
+        <ul className="mt-3 divide-y divide-zinc-800">
+          {data.recentDeliveryFailures.map((failure) => (
+            <li
+              className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"
+              key={failure.campaign_id}
+            >
+              <div className="min-w-0">
+                <Link
+                  className="block truncate text-sm font-medium text-zinc-100 outline-none transition-colors hover:text-indigo-300 focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-indigo-400"
+                  href={`/campaigns/${failure.campaign_id}`}
+                >
+                  {failure.campaign_name}
+                </Link>
+                <p className="mt-1 text-xs text-zinc-500">
+                  Last failed {formatDeliveryFailureTime(failure.last_failed_at)}
+                </p>
+              </div>
+              <span className="inline-flex shrink-0 items-center gap-1 self-start rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs font-medium text-red-300 sm:self-auto">
+                {formatCount(failure.failed_count)} failed
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </article>
+  );
+}
+
+function CampaignFilterForm({
+  searchQuery,
+  hasSession,
+}: Readonly<{
+  searchQuery: string;
+  hasSession: boolean;
+}>) {
+  return (
+    <div className="mt-4 rounded-md border border-zinc-800 bg-zinc-950 p-3">
+      <form
+        action="/dashboard"
+        className="flex flex-col gap-3 lg:flex-row lg:items-end"
+      >
+        <div className="min-w-0 flex-1 space-y-2">
+          <label
+            className="text-xs font-medium uppercase tracking-wide text-zinc-500"
+            htmlFor="dashboard-campaign-filter"
+          >
+            Filter campaign names
+          </label>
+          <input
+            className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 hover:border-zinc-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 disabled:text-zinc-500"
+            defaultValue={searchQuery}
+            disabled={!hasSession}
+            id="dashboard-campaign-filter"
+            name="q"
+            placeholder={
+              hasSession
+                ? "Search by campaign name"
+                : "Sign in to filter campaigns"
+            }
+            type="search"
+          />
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            className={
+              hasSession
+                ? "h-10 rounded-md bg-indigo-600 px-4 text-sm font-medium text-white outline-none transition-colors hover:bg-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-400"
+                : "h-10 rounded-md border border-zinc-800 bg-zinc-900 px-4 text-sm font-medium text-zinc-500 outline-none"
+            }
+            disabled={!hasSession}
+            title={
+              hasSession
+                ? undefined
+                : "Sign in to filter campaign records."
+            }
+            type="submit"
+          >
+            Filter
+          </button>
+          {searchQuery ? (
+            <Link
+              className="inline-flex h-10 items-center justify-center rounded-md border border-zinc-700 px-4 text-sm font-medium text-zinc-300 outline-none transition-colors hover:bg-zinc-800 hover:text-zinc-50 focus-visible:ring-2 focus-visible:ring-indigo-400"
+              href="/dashboard"
+            >
+              Clear
+            </Link>
+          ) : null}
+        </div>
+      </form>
+      {searchQuery ? (
+        <p className="mt-2 text-xs text-zinc-500">
+          Showing campaigns matching{" "}
+          <span className="font-medium text-zinc-300">“{searchQuery}”</span>.
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -396,8 +502,42 @@ function CampaignTable({
   campaigns: CampaignRow[];
   searchQuery: string;
 }>) {
+  if (campaigns.length === 0) {
+    return (
+      <div className="mt-4 rounded-md border border-dashed border-zinc-700 bg-zinc-950 p-6 text-center">
+        <p className="text-sm font-medium text-zinc-200">
+          {searchQuery
+            ? "No campaigns match this filter"
+            : "No campaign records yet"}
+        </p>
+        <p className="mt-2 text-sm text-zinc-500">
+          {searchQuery
+            ? "No campaign name matches the current filter. Clear the filter or try a different name."
+            : "Create your first campaign to start scheduling and sending from this workspace."}
+        </p>
+        <div className="mt-4 flex justify-center">
+          {searchQuery ? (
+            <Link
+              className="inline-flex h-9 items-center justify-center rounded-md border border-zinc-700 px-3 text-sm font-medium text-zinc-200 outline-none transition-colors hover:bg-zinc-800 hover:text-zinc-50 focus-visible:ring-2 focus-visible:ring-indigo-400"
+              href="/dashboard"
+            >
+              Clear filter
+            </Link>
+          ) : (
+            <Link
+              className="inline-flex h-9 items-center justify-center rounded-md bg-indigo-600 px-3 text-sm font-medium text-white outline-none transition-colors hover:bg-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-400"
+              href="/campaigns"
+            >
+              Create campaign
+            </Link>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="mt-4 overflow-x-auto">
+    <div className="marekto-scrollbar mt-4 overflow-x-auto">
       <table className="w-full min-w-full text-left text-sm">
         <thead className="border-b border-zinc-800 text-xs font-medium uppercase tracking-wide text-zinc-500">
           <tr>
@@ -406,43 +546,144 @@ function CampaignTable({
             <th className="py-3">Schedule</th>
           </tr>
         </thead>
-        <tbody className={campaigns.length > 0 ? "divide-y divide-zinc-800" : undefined}>
-          {campaigns.length > 0 ? (
-            campaigns.map((campaign) => (
-              <tr key={campaign.id} className="text-zinc-300">
-                <td className="py-4 pr-4 font-medium text-zinc-50">
-                  {campaign.name}
-                </td>
-                <td className="py-4 pr-4">
-                  <span
-                    className={`inline-flex rounded-md border px-2 py-1 text-xs font-medium ${statusClassName(campaign.status)}`}
-                  >
-                    {campaign.status}
-                  </span>
-                </td>
-                <td className="py-4 text-zinc-400">{formatSchedule(campaign)}</td>
-              </tr>
-            ))
-          ) : (
-            <tr>
-              <td colSpan={3} className="py-10">
-                <div className="rounded-md border border-dashed border-zinc-700 bg-zinc-950 p-6 text-center">
-                  <p className="text-sm font-medium text-zinc-200">
-                    No campaign data available
-                  </p>
-                  <p className="mt-2 text-sm text-zinc-500">
-                    {searchQuery
-                      ? "No real campaign records match the current search."
-                      : "Create real campaign records through the backend before this table is populated."}
-                  </p>
-                </div>
+        <tbody className="divide-y divide-zinc-800">
+          {campaigns.map((campaign) => (
+            <tr key={campaign.id} className="text-zinc-300">
+              <td className="py-4 pr-4 font-medium text-zinc-50">
+                {campaign.name}
+              </td>
+              <td className="py-4 pr-4">
+                <span
+                  className={`inline-flex rounded-md border px-2 py-1 text-xs font-medium ${statusClassName(campaign.status)}`}
+                >
+                  {campaign.status}
+                </span>
+              </td>
+              <td className="whitespace-nowrap py-4 text-zinc-400">
+                {formatSchedule(campaign)}
               </td>
             </tr>
-          )}
+          ))}
         </tbody>
       </table>
     </div>
   );
+}
+
+function CampaignPipelineCard({
+  data,
+  searchQuery,
+  hasSession,
+}: Readonly<{
+  data: DashboardData;
+  searchQuery: string;
+  hasSession: boolean;
+}>) {
+  return (
+    <article className="min-w-0 rounded-md border border-zinc-800 bg-zinc-900 p-4 shadow-sm xl:col-span-2">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-zinc-50">
+            Campaign pipeline
+          </h2>
+          <p className="mt-1 text-sm text-zinc-400">
+            Real campaign records from the authenticated workspace.
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Link
+            className="inline-flex h-9 items-center justify-center rounded-md bg-indigo-600 px-3 text-sm font-medium text-white outline-none transition-colors hover:bg-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-400"
+            href="/campaigns"
+          >
+            New campaign
+          </Link>
+          <button
+            className="h-9 rounded-md border border-zinc-800 px-3 text-sm font-medium text-zinc-500 outline-none"
+            disabled
+            title="Report export is not available yet — no export API exists for this workspace."
+            type="button"
+          >
+            Export report
+          </button>
+        </div>
+      </div>
+
+      <CampaignFilterForm searchQuery={searchQuery} hasSession={hasSession} />
+
+      <CampaignTable
+        campaigns={data.status === "ready" ? data.campaigns : []}
+        searchQuery={searchQuery}
+      />
+    </article>
+  );
+}
+
+function SupportingCards({ data }: Readonly<{ data: DashboardData }>) {
+  return (
+    <aside className="min-w-0 space-y-6">
+      <article className="rounded-md border border-zinc-800 bg-zinc-900 p-4 shadow-sm">
+        <h2 className="text-lg font-semibold text-zinc-50">Audience data</h2>
+        {data.status === "ready" ? (
+          <div className="mt-4 rounded-md border border-zinc-800 bg-zinc-950 p-4">
+            <p className="text-sm font-medium text-zinc-200">
+              Contacts and lists are connected.
+            </p>
+            <dl className="mt-3 space-y-2 text-sm">
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-zinc-500">Contacts</dt>
+                <dd className="font-medium text-zinc-100">
+                  {formatCount(data.metrics.contacts)}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-zinc-500">Lists</dt>
+                <dd className="font-medium text-zinc-100">
+                  {formatCount(data.metrics.lists)}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        ) : (
+          <div className="mt-4 rounded-md border border-dashed border-zinc-700 bg-zinc-950 p-4 text-center">
+            <p className="text-sm font-medium text-zinc-200">
+              Audience data unavailable
+            </p>
+            <p className="mt-2 text-sm text-zinc-500">
+              Sign in before showing contact and list data.
+            </p>
+          </div>
+        )}
+      </article>
+
+      <article className="rounded-md border border-zinc-800 bg-zinc-900 p-4 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-zinc-50">
+            Automation experiments
+          </h2>
+          <span className="shrink-0 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs font-medium text-zinc-400">
+            Coming soon
+          </span>
+        </div>
+        <div className="mt-4 rounded-md border border-dashed border-zinc-700 bg-zinc-950 p-4">
+          <p className="text-sm font-medium text-zinc-200">
+            Automation is not available yet
+          </p>
+          <p className="mt-2 text-sm text-zinc-500">
+            Experiment planning will appear here once an automation backend is
+            connected. Nothing is scheduled from this panel today.
+          </p>
+        </div>
+      </article>
+    </aside>
+  );
+}
+
+function DashboardBody({
+  children,
+}: Readonly<{
+  children: ReactNode;
+}>) {
+  return <div className="space-y-8">{children}</div>;
 }
 
 export default async function DashboardPage({ searchParams }: DashboardProps) {
@@ -458,150 +699,20 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
       eyebrow="Marketing command center"
       title="Dashboard overview"
     >
-      <DashboardStatus data={data} />
-      <MetricsSection data={data} />
-      <DeliveryMetricsSection data={data} />
+      <DashboardBody>
+        <DashboardStatus data={data} />
+        <WorkspaceMetrics data={data} />
+        <DeliveryMetrics data={data} />
 
-      <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <article className="min-w-0 rounded-md border border-zinc-800 bg-zinc-900 p-4 shadow-sm xl:col-span-2">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-zinc-50">
-                Campaign pipeline
-              </h2>
-              <p className="mt-1 text-sm text-zinc-400">
-                Real campaign records from the authenticated workspace.
-              </p>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Link
-                className="inline-flex h-9 items-center justify-center rounded-md bg-indigo-600 px-3 text-sm font-medium text-white outline-none transition-colors hover:bg-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-400"
-                href="/campaigns"
-              >
-                New campaign
-              </Link>
-              <button
-                className="h-9 rounded-md border border-zinc-800 px-3 text-sm font-medium text-zinc-500 outline-none"
-                disabled
-                title="No report export API is available."
-                type="button"
-              >
-                Export report
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-md border border-zinc-800 bg-zinc-950 p-3">
-            <form
-              action="/dashboard"
-              className="flex flex-col gap-3 lg:flex-row lg:items-end"
-            >
-              <div className="min-w-0 flex-1 space-y-2">
-                <label
-                  className="text-xs font-medium uppercase tracking-wide text-zinc-500"
-                  htmlFor="dashboard-campaign-filter"
-                >
-                  Filter campaign names
-                </label>
-                <input
-                  className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 hover:border-zinc-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 disabled:text-zinc-500"
-                  defaultValue={searchQuery}
-                  disabled={!hasSession}
-                  id="dashboard-campaign-filter"
-                  name="q"
-                  placeholder={
-                    hasSession ? "Search by campaign name" : "Sign in to filter campaigns"
-                  }
-                  type="search"
-                />
-              </div>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <button
-                  className={
-                    hasSession
-                      ? "h-10 rounded-md bg-indigo-600 px-4 text-sm font-medium text-white outline-none transition-colors hover:bg-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-400"
-                      : "h-10 rounded-md border border-zinc-800 bg-zinc-900 px-4 text-sm font-medium text-zinc-500 outline-none"
-                  }
-                  disabled={!hasSession}
-                  type="submit"
-                >
-                  Filter
-                </button>
-                {searchQuery ? (
-                  <Link
-                    className="inline-flex h-10 items-center justify-center rounded-md border border-zinc-700 px-4 text-sm font-medium text-zinc-300 outline-none transition-colors hover:bg-zinc-800 hover:text-zinc-50 focus-visible:ring-2 focus-visible:ring-indigo-400"
-                    href="/dashboard"
-                  >
-                    Clear
-                  </Link>
-                ) : null}
-              </div>
-            </form>
-            {searchQuery ? (
-              <p className="mt-2 text-xs text-zinc-500">
-                Showing campaigns matching{" "}
-                <span className="font-medium text-zinc-300">“{searchQuery}”</span>.
-              </p>
-            ) : null}
-          </div>
-
-          <CampaignTable
-            campaigns={data.status === "ready" ? data.campaigns : []}
+        <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+          <CampaignPipelineCard
+            data={data}
             searchQuery={searchQuery}
+            hasSession={hasSession}
           />
-        </article>
-
-        <aside className="min-w-0 space-y-6">
-          <article className="rounded-md border border-zinc-800 bg-zinc-900 p-4 shadow-sm">
-            <h2 className="text-lg font-semibold text-zinc-50">Audience data</h2>
-            {data.status === "ready" ? (
-              <div className="mt-4 rounded-md border border-zinc-800 bg-zinc-950 p-4">
-                <p className="text-sm font-medium text-zinc-200">
-                  Contacts and lists are connected.
-                </p>
-                <p className="mt-2 text-sm text-zinc-500">
-                  Contact count: {formatCount(data.metrics.contacts)}
-                </p>
-                <p className="mt-1 text-sm text-zinc-500">
-                  List count: {formatCount(data.metrics.lists)}
-                </p>
-              </div>
-            ) : (
-              <div className="mt-4 rounded-md border border-dashed border-zinc-700 bg-zinc-950 p-4 text-center">
-                <p className="text-sm font-medium text-zinc-200">
-                  Audience data unavailable
-                </p>
-                <p className="mt-2 text-sm text-zinc-500">
-                  Sign in before showing contact and list data.
-                </p>
-              </div>
-            )}
-          </article>
-
-          <article className="rounded-md border border-zinc-800 bg-zinc-900 p-4 shadow-sm">
-            <h2 className="text-lg font-semibold text-zinc-50">
-              Automation experiments
-            </h2>
-            <div className="mt-4 rounded-md border border-dashed border-zinc-700 bg-zinc-950 p-4 text-center">
-              <p className="text-sm font-medium text-zinc-200">
-                No automation data available
-              </p>
-              <p className="mt-2 text-sm text-zinc-500">
-                No experiment route or backend API exists yet for this dashboard
-                action.
-              </p>
-              <button
-                className="mt-4 h-9 rounded-md border border-zinc-800 px-3 text-sm font-medium text-zinc-500 outline-none"
-                disabled
-                title="No automation API is available."
-                type="button"
-              >
-                Plan experiment
-              </button>
-            </div>
-          </article>
-        </aside>
-      </section>
+          <SupportingCards data={data} />
+        </section>
+      </DashboardBody>
     </AppShell>
   );
 }
