@@ -22,9 +22,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      # Keep the framework build deterministic and offline.
+      # Keep the framework build deterministic and offline. Next.js imports
+      # route modules during production build/page-data collection; the DB
+      # module validates DATABASE_URL at import time but does not connect until
+      # a query runs, so a non-secret placeholder is enough for this job.
       NEXT_TELEMETRY_DISABLED: "1"
       CI: "true"
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/marekto_ci_build
+      DATABASE_SSL: disable
     steps:
       - name: Checkout
         uses: actions/checkout@v4
