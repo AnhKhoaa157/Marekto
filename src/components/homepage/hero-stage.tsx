@@ -107,7 +107,7 @@ const heroFlowCards: ReadonlyArray<{
   icon: (props: IconProps) => ReactNode;
 }> = [
   { id: "contacts", label: "Contacts", caption: "Ingested records", icon: ContactsIcon },
-  { id: "scoring", label: "AI scoring", caption: "Validated lead score", icon: ScoreIcon },
+  { id: "scoring", label: "Lead score", caption: "Contact attribute", icon: ScoreIcon },
   { id: "segmentation", label: "Segmentation", caption: "Plain-language filter", icon: SegmentIcon },
   { id: "campaign", label: "Campaign", caption: "Scheduled run-at", icon: CampaignIcon },
   { id: "email", label: "Personalized email", caption: "Per-contact content", icon: MailIcon },

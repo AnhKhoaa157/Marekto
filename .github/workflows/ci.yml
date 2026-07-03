@@ -1,0 +1,98 @@
+name: CI
+
+# Deterministic release quality gate. Runs on every pull request and on pushes
+# to main. No production secrets are referenced; ordinary tests make no live
+# Gemini, SMTP, or external network calls.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel superseded runs on the same ref to save runner time.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Typecheck, lint, unit tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Keep the framework build deterministic and offline.
+      NEXT_TELEMETRY_DISABLED: "1"
+      CI: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit and contract tests
+        run: npm test
+
+      # Note: `npm run postman:check` is a local developer gate. The Phase 13
+      # operational scripts are tracked, but the pre-existing Postman validator
+      # and collection remain local-only, so CI avoids that command on a fresh
+      # clone. Run it locally before opening a PR.
+
+      - name: Production build
+        run: npm run build
+
+  integration:
+    name: PostgreSQL integration (RLS + worker concurrency)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Non-secret, disposable database credentials for an ephemeral CI service.
+    # These are throwaway values for a container that is destroyed with the job;
+    # they are never production credentials.
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/marekto_ci_test
+      DATABASE_SSL: disable
+      NEXT_TELEMETRY_DISABLED: "1"
+      CI: "true"
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: marekto_ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: PostgreSQL integration suite
+        run: npm run test:integration
