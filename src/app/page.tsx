@@ -193,9 +193,9 @@ const flowSteps: ReadonlyArray<{ title: string; description: string }> = [
       "Raw customer records enter through the contacts API with fixed identity fields.",
   },
   {
-    title: "AI lead scoring",
+    title: "Lead-score attributes",
     description:
-      "Each contact is analyzed to produce a validated lead score and tags.",
+      "Lead score and tags are stored as contact attributes that stay available for segmentation.",
   },
   {
     title: "JSONB enrichment",
@@ -236,9 +236,9 @@ const features: ReadonlyArray<{
     icon: ContactsIcon,
   },
   {
-    title: "AI lead scoring",
+    title: "Lead-score segmentation",
     description:
-      "Turn raw contact data into a validated lead score and tags that enrich each record automatically.",
+      "Store a lead score and tags on each contact and target them with safe, operator-whitelisted filters.",
     icon: ScoreIcon,
   },
   {
@@ -603,7 +603,7 @@ const footerAppLinks: ReadonlyArray<{ href: string; label: string }> = [
 ];
 
 const footerPlatformSummary: ReadonlyArray<string> = [
-  "AI lead scoring",
+  "Lead-score segmentation",
   "Smart segmentation",
   "Campaign scheduling",
   "Personalized email delivery",

@@ -8,8 +8,15 @@
     "start": "next start",
     "lint": "eslint",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --experimental-strip-types tests/*.test.mjs",
+    "test:integration": "node scripts/run-integration-tests.mjs",
+    "smoke:e2e": "node scripts/run-e2e-smoke.mjs",
+    "smoke:live": "node scripts/run-e2e-smoke.mjs --live",
     "typecheck": "tsc --noEmit",
+    "verify": "npm run typecheck && npm run lint && npm test && npm run build",
     "postman:check": "node scripts/validate-postman.mjs"
+  },
+  "engines": {
+    "node": ">=22.6.0"
   },
   "dependencies": {
     "@types/swagger-ui-react": "^5.18.0",
