@@ -14,6 +14,7 @@ import {
   isGeminiProviderUnavailableError,
   type GeminiJsonRequest,
 } from "./gemini.ts";
+import { buildSegmentationRequest } from "./prompts/segmentation-prompt.ts";
 
 const MAX_SEGMENTATION_PROMPT_LENGTH = 500;
 const SEGMENTATION_CACHE_FEATURE = "segmentation";
@@ -32,29 +33,6 @@ const LEAD_SCORE_KEYS = new Set([
   "lead_score_lt",
   "lead_score_lte",
 ]);
-
-const SEGMENTATION_SYSTEM_INSTRUCTION =
-  "Convert the user's audience description into one JSON object for a marketing " +
-  "contact filter. Use only city, lead_score_gt, lead_score_gte, lead_score_lt, " +
-  "lead_score_lte, and tags_contains. Conditions are combined with AND. " +
-  "Map HCM, Ho Chi Minh, and Saigon to city HCM. Map VIP wording to " +
-  "tags_contains VIP instead of copying the full sentence. Map above or over " +
-  "a lead score to lead_score_gt, at least to lead_score_gte, below to " +
-  "lead_score_lt, and at most to lead_score_lte. tags_contains must be a short " +
-  "tag value, not the full audience request. Never add explanations, SQL, " +
-  "contact records, or unsupported keys.";
-
-const SEGMENTATION_RESPONSE_SCHEMA: Record<string, unknown> = {
-  type: "OBJECT",
-  properties: {
-    city: { type: "STRING" },
-    lead_score_gt: { type: "NUMBER", minimum: 0, maximum: 100 },
-    lead_score_gte: { type: "NUMBER", minimum: 0, maximum: 100 },
-    lead_score_lt: { type: "NUMBER", minimum: 0, maximum: 100 },
-    lead_score_lte: { type: "NUMBER", minimum: 0, maximum: 100 },
-    tags_contains: { type: "STRING" },
-  },
-};
 
 type GeminiJsonGenerator = (request: GeminiJsonRequest) => Promise<unknown>;
 type SegmentationSource = "gemini" | "cache";
@@ -152,11 +130,7 @@ export async function generateAudienceFilters(
   generateJson: GeminiJsonGenerator = generateGeminiJson,
 ): Promise<CampaignTargetFilters> {
   const prompt = parseSegmentationPrompt(promptValue);
-  const output = await generateJson({
-    prompt,
-    systemInstruction: SEGMENTATION_SYSTEM_INSTRUCTION,
-    responseSchema: SEGMENTATION_RESPONSE_SCHEMA,
-  });
+  const output = await generateJson(buildSegmentationRequest(prompt));
 
   return parseAiSegmentationFilters(output);
 }
@@ -176,11 +150,7 @@ export async function generateAudienceFiltersWithCache(
   const writeCache = dependencies.writeCache ?? saveAiOutput;
 
   try {
-    const output = await generateJson({
-      prompt,
-      systemInstruction: SEGMENTATION_SYSTEM_INSTRUCTION,
-      responseSchema: SEGMENTATION_RESPONSE_SCHEMA,
-    });
+    const output = await generateJson(buildSegmentationRequest(prompt));
     const targetFilters = parseAiSegmentationFilters(output);
 
     await writeCache({
