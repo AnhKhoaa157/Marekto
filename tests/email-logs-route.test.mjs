@@ -87,6 +87,7 @@ const CAMPAIGN_ROW = {
   status: "sent",
   failure_reason: null,
   ai_personalization_enabled: true,
+  ai_context: { tone: "warm" },
   scheduled_at: new Date("2026-07-01T00:00:00.000Z"),
   run_at: new Date("2026-07-01T00:01:00.000Z"),
 };
@@ -227,6 +228,7 @@ test("campaign with no logs returns zero counts and an empty log list", async ()
         status: "sent",
         failure_reason: null,
         ai_personalization_enabled: true,
+        ai_context: { tone: "warm" },
         scheduled_at: "2026-07-01T00:00:00.000Z",
         run_at: "2026-07-01T00:01:00.000Z",
       },

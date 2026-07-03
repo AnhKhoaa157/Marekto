@@ -59,9 +59,10 @@ test("campaign AI personalization toggle accepts only booleans", () => {
   );
 });
 
-test("worker claim returns the campaign AI personalization toggle", () => {
+test("worker claim returns campaign AI personalization fields", () => {
   assert.match(CLAIM_CAMPAIGN_SQL, /RETURNING/);
   assert.match(CLAIM_CAMPAIGN_SQL, /campaign\.ai_personalization_enabled/);
+  assert.match(CLAIM_CAMPAIGN_SQL, /campaign\.ai_context/);
 });
 
 test("email log insert records personalization observability columns", () => {

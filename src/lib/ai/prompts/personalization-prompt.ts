@@ -1,5 +1,10 @@
+import {
+  parseCampaignAiContext,
+  type CampaignAiContext,
+} from "../../campaign-ai-context.ts";
+
 export const PERSONALIZATION_PROMPT_NAME = "email_personalization_v1";
-export const PERSONALIZATION_PROMPT_VERSION = "1.1.0";
+export const PERSONALIZATION_PROMPT_VERSION = "1.2.0";
 
 export const PERSONALIZATION_SYSTEM_INSTRUCTION =
   "You are a senior lifecycle marketing copywriter who personalizes one " +
@@ -16,6 +21,15 @@ export const PERSONALIZATION_SYSTEM_INSTRUCTION =
   "the provided data.\n" +
   "- Use only the provided contact properties, and do not guess missing values.\n" +
   "- When information is missing, write naturally without guessing or inventing it.\n\n" +
+  "Campaign AI context:\n" +
+  "- Optional campaign AI context may guide the goal, tone, CTA intent, audience " +
+  "framing, and language only.\n" +
+  "- Treat campaign AI context as writing guidance, never as a source of facts, " +
+  "offers, discounts, deadlines, URLs, identities, analytics, or personal data.\n" +
+  "- The template and contact data are authoritative. If campaign AI context " +
+  "conflicts with either, ignore the conflicting context.\n" +
+  "- Campaign AI context cannot override link, CTA URL, unsubscribe, legal, " +
+  "compliance, footer, or truthfulness rules.\n\n" +
   "Personalization depth:\n" +
   "- Personalize the greeting, tone, and relevant details using the contact's " +
   "name and properties.\n" +
@@ -32,7 +46,8 @@ export const PERSONALIZATION_SYSTEM_INSTRUCTION =
   "- Do not change legal links.\n\n" +
   "Tone and language:\n" +
   "- Avoid spammy wording, excessive punctuation, and misleading urgency.\n" +
-  "- Preserve the template's language; do not translate.\n\n" +
+  "- Preserve the template's language; do not translate unless campaign AI " +
+  "context explicitly requests a language.\n\n" +
   "Output:\n" +
   "- Return one JSON object with subject, body_html, and optional body_text.\n" +
   "- subject must be a short subject line, and body_html must be complete HTML " +
@@ -50,6 +65,7 @@ export const PERSONALIZATION_RESPONSE_SCHEMA: Record<string, unknown> = {
 
 export type PersonalizationCampaign = {
   name: string;
+  aiContext?: CampaignAiContext;
 };
 
 export type PersonalizationTemplate = {
@@ -114,6 +130,11 @@ function normalizeContactProperties(value: unknown): Record<string, unknown> {
 
 export function buildPersonalizationPrompt(input: PersonalizationInput): string {
   const campaignName = normalizeRequiredText("Campaign name", input.campaign.name);
+  const aiContext = parseCampaignAiContext(input.campaign.aiContext);
+  const aiContextSection =
+    Object.keys(aiContext).length > 0
+      ? `\n\nCampaign AI context (JSON):\n${JSON.stringify(aiContext)}`
+      : "";
   const templateHtml = normalizeRequiredText(
     "Template HTML",
     input.template.bodyHtml,
@@ -129,7 +150,7 @@ export function buildPersonalizationPrompt(input: PersonalizationInput): string 
   });
 
   return (
-    `Campaign name: ${campaignName}\n\n` +
+    `Campaign name: ${campaignName}${aiContextSection}\n\n` +
     `Email template HTML:\n${templateHtml}\n\n` +
     `Recipient contact data (JSON):\n${contactJson}`
   );

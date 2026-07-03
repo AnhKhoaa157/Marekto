@@ -12,7 +12,7 @@
 const REQUIRED_ENV_VARS = ["DATABASE_URL"] as const;
 const INITIALIZATION_TIMEOUT_MS = 60_000;
 const SLOW_QUERY_THRESHOLD_MS = 1_000;
-const MIGRATION_VERSION = "v9_email_logs_contact_retention";
+const MIGRATION_VERSION = "v10_campaign_ai_context";
 
 type SafeDatabaseConfig = {
   source: "DATABASE_URL";
@@ -293,6 +293,7 @@ CREATE TABLE IF NOT EXISTS "Campaigns" (
   status VARCHAR NOT NULL DEFAULT 'draft',
   target_filters JSONB NOT NULL DEFAULT '{}'::jsonb,
   ai_personalization_enabled BOOLEAN NOT NULL DEFAULT false,
+  ai_context JSONB NOT NULL DEFAULT '{}'::jsonb,
   run_at TIMESTAMPTZ,
   scheduled_at TIMESTAMPTZ,
   processing_started_at TIMESTAMPTZ,
@@ -483,6 +484,8 @@ ALTER TABLE "Campaigns" ADD COLUMN IF NOT EXISTS processing_started_at TIMESTAMP
 ALTER TABLE "Campaigns" ADD COLUMN IF NOT EXISTS failure_reason TEXT;
 -- Phase 10.1: campaign-level AI personalization toggle.
 ALTER TABLE "Campaigns" ADD COLUMN IF NOT EXISTS ai_personalization_enabled BOOLEAN NOT NULL DEFAULT false;
+-- PQ-4: optional campaign-specific guidance for AI personalization.
+ALTER TABLE "Campaigns" ADD COLUMN IF NOT EXISTS ai_context JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE "Campaigns" DISABLE ROW LEVEL SECURITY;
 
 UPDATE "Campaigns" SET status = 'pending' WHERE status = 'scheduled';

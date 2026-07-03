@@ -11,6 +11,7 @@ import {
   isRecord,
   requestApi,
 } from "@/lib/client-api";
+import { parseCampaignAiContext } from "@/lib/campaign-ai-context";
 import {
   getEmailLogErrorCategoryLabel,
   getEmailLogPersonalizationLabel,
@@ -99,6 +100,7 @@ function parseCampaign(value: unknown): CampaignDeliveryCampaign {
     status: value.status,
     failure_reason: parseNullableString(value.failure_reason, "failure reason"),
     ai_personalization_enabled: value.ai_personalization_enabled,
+    ai_context: parseCampaignAiContext(value.ai_context),
     scheduled_at: parseNullableString(value.scheduled_at, "scheduled time"),
     run_at: parseNullableString(value.run_at, "run time"),
   };

@@ -211,6 +211,9 @@ export const openApiSpec = {
             description:
               "When true, the worker personalizes each recipient's email with Gemini before SMTP delivery, falling back to the raw template if Gemini is unavailable. When false, the raw template is sent as-is.",
           },
+          ai_context: {
+            $ref: "#/components/schemas/CampaignAiContext",
+          },
           scheduled_at: {
             type: "string",
             format: "date-time",
@@ -243,6 +246,26 @@ export const openApiSpec = {
           tags_contains: { type: "string" },
         },
         additionalProperties: false,
+      },
+      CampaignAiContext: {
+        type: "object",
+        description:
+          "Optional campaign-specific guidance for email personalization. These fields guide tone and intent only; they cannot override template/contact facts, URLs, compliance content, or validation.",
+        properties: {
+          goal: { type: "string", maxLength: 500 },
+          tone: { type: "string", maxLength: 100 },
+          cta: { type: "string", maxLength: 300 },
+          audience_description: { type: "string", maxLength: 500 },
+          language: { type: "string", maxLength: 50 },
+        },
+        additionalProperties: false,
+        example: {
+          goal: "announce a seasonal offer",
+          tone: "friendly",
+          cta: "book a demo",
+          audience_description: "VIP customers in HCM",
+          language: "en",
+        },
       },
       SegmentationResponse: {
         type: "object",
@@ -637,6 +660,9 @@ export const openApiSpec = {
                             status: { type: "string" },
                             failure_reason: { type: "string", nullable: true },
                             ai_personalization_enabled: { type: "boolean" },
+                            ai_context: {
+                              $ref: "#/components/schemas/CampaignAiContext",
+                            },
                             scheduled_at: {
                               type: "string",
                               format: "date-time",

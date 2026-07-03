@@ -1,6 +1,10 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
 
 import {
+  parseCampaignAiContext,
+  type CampaignAiContext,
+} from "@/lib/campaign-ai-context";
+import {
   parseCampaignTargetFilters,
   type CampaignTargetFilters,
 } from "@/lib/campaign-filters";
@@ -22,13 +26,13 @@ export const dynamic = "force-dynamic";
 const UPDATE_CAMPAIGN_SQL =
   'UPDATE "Campaigns" SET name = $1, status = $2, target_filters = $3::jsonb, ' +
   "scheduled_at = $4::timestamptz, run_at = $4::timestamptz, template_id = $5::int, " +
-  "ai_personalization_enabled = $6, updated_at = CURRENT_TIMESTAMP " +
-  "WHERE id = $7 AND workspace_id = $8 " +
-  "RETURNING id, workspace_id, template_id, name, status, target_filters, ai_personalization_enabled, scheduled_at, run_at, created_at, updated_at";
+  "ai_personalization_enabled = $6, ai_context = $7::jsonb, updated_at = CURRENT_TIMESTAMP " +
+  "WHERE id = $8 AND workspace_id = $9 " +
+  "RETURNING id, workspace_id, template_id, name, status, target_filters, ai_personalization_enabled, ai_context, scheduled_at, run_at, created_at, updated_at";
 const SELECT_CAMPAIGN_FOR_UPDATE_SQL =
-  'SELECT id, workspace_id, template_id, name, status, target_filters, ai_personalization_enabled, scheduled_at, run_at, created_at, updated_at FROM "Campaigns" WHERE id = $1 AND workspace_id = $2 FOR UPDATE';
+  'SELECT id, workspace_id, template_id, name, status, target_filters, ai_personalization_enabled, ai_context, scheduled_at, run_at, created_at, updated_at FROM "Campaigns" WHERE id = $1 AND workspace_id = $2 FOR UPDATE';
 const DELETE_CAMPAIGN_SQL =
-  'DELETE FROM "Campaigns" WHERE id = $1 AND workspace_id = $2 RETURNING id, workspace_id, template_id, name, status, target_filters, ai_personalization_enabled, scheduled_at, run_at, created_at, updated_at';
+  'DELETE FROM "Campaigns" WHERE id = $1 AND workspace_id = $2 RETURNING id, workspace_id, template_id, name, status, target_filters, ai_personalization_enabled, ai_context, scheduled_at, run_at, created_at, updated_at';
 
 type RouteParams = {
   params: Promise<{ id: string }>;
@@ -42,6 +46,7 @@ type CampaignRow = {
   status: CampaignStatus;
   target_filters: CampaignTargetFilters;
   ai_personalization_enabled: boolean;
+  ai_context: CampaignAiContext;
   scheduled_at: Date | null;
   run_at: Date | null;
   created_at: Date;
@@ -54,6 +59,7 @@ type UpdateCampaignBody = {
   status?: unknown;
   target_filters?: unknown;
   ai_personalization_enabled?: unknown;
+  ai_context?: unknown;
   scheduled_at?: unknown;
 };
 
@@ -161,8 +167,9 @@ function statusForError(message: string): number {
     message.endsWith("must be a finite number") ||
     message.endsWith("must be a string or null") ||
     message === "tags_contains must be a non-empty string";
+  const aiContextValidationError = message.startsWith("ai_context");
 
-  return knownValidationError || filterValidationError
+  return knownValidationError || filterValidationError || aiContextValidationError
     ? 400
     : 500;
 }
@@ -181,6 +188,10 @@ export async function PUT(request: NextRequest, context: RouteParams) {
     const scheduledAt = parseScheduledAt(body.scheduled_at);
     const templateId = parseTemplateId(body.template_id);
     const aiPersonalizationProvided = body.ai_personalization_enabled !== undefined;
+    const aiContextProvided = body.ai_context !== undefined;
+    const aiContext = aiContextProvided
+      ? parseCampaignAiContext(body.ai_context)
+      : null;
 
     if (
       name === null &&
@@ -188,7 +199,8 @@ export async function PUT(request: NextRequest, context: RouteParams) {
       targetFilters === null &&
       !scheduledAt.provided &&
       !templateId.provided &&
-      !aiPersonalizationProvided
+      !aiPersonalizationProvided &&
+      !aiContextProvided
     ) {
       throw new Error("At least one field is required");
     }
@@ -241,6 +253,9 @@ export async function PUT(request: NextRequest, context: RouteParams) {
         parseAiPersonalizationEnabled(
           body.ai_personalization_enabled,
           currentCampaign.ai_personalization_enabled,
+        ),
+        JSON.stringify(
+          aiContext ?? parseCampaignAiContext(currentCampaign.ai_context),
         ),
         campaignId,
         workspaceId,

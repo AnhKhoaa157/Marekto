@@ -1,4 +1,8 @@
 import type { EmailPersonalizationSource } from "./campaign-worker.ts";
+import {
+  parseCampaignAiContext,
+  type CampaignAiContext,
+} from "./campaign-ai-context.ts";
 import { sanitizeWorkerLogReason } from "./worker-log.ts";
 
 export type { EmailPersonalizationSource } from "./campaign-worker.ts";
@@ -18,7 +22,7 @@ export type EmailLogErrorCategory =
   | "unknown";
 
 export const SELECT_CAMPAIGN_DELIVERY_SQL =
-  "SELECT id, name, status, failure_reason, ai_personalization_enabled, scheduled_at, run_at " +
+  "SELECT id, name, status, failure_reason, ai_personalization_enabled, ai_context, scheduled_at, run_at " +
   'FROM "Campaigns" WHERE id = $1 AND workspace_id = $2';
 
 export const SELECT_EMAIL_LOG_SUMMARY_SQL =
@@ -50,6 +54,7 @@ export type CampaignDeliveryRow = {
   status: string;
   failure_reason: string | null;
   ai_personalization_enabled: boolean;
+  ai_context: unknown;
   scheduled_at: Date | null;
   run_at: Date | null;
 };
@@ -84,6 +89,7 @@ export type CampaignDeliveryCampaign = {
   status: string;
   failure_reason: string | null;
   ai_personalization_enabled: boolean;
+  ai_context: CampaignAiContext;
   scheduled_at: string | null;
   run_at: string | null;
 };
@@ -249,6 +255,7 @@ export function toCampaignDeliveryCampaign(
       ? sanitizeWorkerLogReason(row.failure_reason)
       : null,
     ai_personalization_enabled: row.ai_personalization_enabled,
+    ai_context: parseCampaignAiContext(row.ai_context),
     scheduled_at: toIsoString(row.scheduled_at),
     run_at: toIsoString(row.run_at),
   };
