@@ -3,8 +3,8 @@
 import { useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useState } from "react";
 
-import { CampaignDetailSkeleton } from "@/components/resources/campaign-detail-skeleton";
-import { ResourceEmpty, ResourceError } from "@/components/resources/resource-states";
+import { CampaignDetailSkeleton } from "@/features/campaigns/components/campaign-detail-skeleton";
+import { ResourceEmpty, ResourceError } from "@/components/shared/resource-states";
 import {
   ApiRequestError,
   formatApiDate,

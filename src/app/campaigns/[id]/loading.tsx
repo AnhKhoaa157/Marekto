@@ -1,5 +1,5 @@
-import { AppShell } from "@/components/dashboard/app-shell";
-import { CampaignDetailSkeleton } from "@/components/resources/campaign-detail-skeleton";
+import { AppShell } from "@/components/layout/app-shell";
+import { CampaignDetailSkeleton } from "@/features/campaigns/components/campaign-detail-skeleton";
 
 export default function CampaignDetailLoading() {
   return (

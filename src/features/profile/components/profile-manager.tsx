@@ -6,7 +6,7 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import {
   ResourceError,
   ResourceLoading,
-} from "@/components/resources/resource-states";
+} from "@/components/shared/resource-states";
 import {
   ApiRequestError,
   formatApiDate,

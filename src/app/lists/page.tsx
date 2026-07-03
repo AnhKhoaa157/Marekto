@@ -1,5 +1,5 @@
-import { AppShell } from "@/components/dashboard/app-shell";
-import { ListsManager } from "@/components/resources/lists-manager";
+import { AppShell } from "@/components/layout/app-shell";
+import { ListsManager } from "@/features/lists/components/lists-manager";
 import { requireServerAuthSession } from "@/lib/server-auth";
 
 export const dynamic = "force-dynamic";

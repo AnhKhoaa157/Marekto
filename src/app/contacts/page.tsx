@@ -1,5 +1,5 @@
-import { AppShell } from "@/components/dashboard/app-shell";
-import { ContactsManager } from "@/components/resources/contacts-manager";
+import { AppShell } from "@/components/layout/app-shell";
+import { ContactsManager } from "@/features/contacts/components/contacts-manager";
 import { requireServerAuthSession } from "@/lib/server-auth";
 
 export const dynamic = "force-dynamic";

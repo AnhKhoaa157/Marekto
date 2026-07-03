@@ -1,5 +1,5 @@
-import { AppShell } from "@/components/dashboard/app-shell";
-import { ProfileManager } from "@/components/resources/profile-manager";
+import { AppShell } from "@/components/layout/app-shell";
+import { ProfileManager } from "@/features/profile/components/profile-manager";
 import { requireServerAuthSession } from "@/lib/server-auth";
 
 export const dynamic = "force-dynamic";

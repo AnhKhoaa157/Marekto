@@ -1,5 +1,5 @@
-import { AppShell } from "@/components/dashboard/app-shell";
-import { TemplatesManager } from "@/components/resources/templates-manager";
+import { AppShell } from "@/components/layout/app-shell";
+import { TemplatesManager } from "@/features/templates/components/templates-manager";
 import { requireServerAuthSession } from "@/lib/server-auth";
 
 export const dynamic = "force-dynamic";

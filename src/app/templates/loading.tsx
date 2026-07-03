@@ -1,4 +1,4 @@
-import { AppRouteLoading } from "@/components/dashboard/app-route-loading";
+import { AppRouteLoading } from "@/components/layout/app-route-loading";
 
 export default function TemplatesLoading() {
   return (

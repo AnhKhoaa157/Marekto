@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { AuthForm } from "@/components/auth/auth-form";
+import { AuthForm } from "@/features/auth/components/auth-form";
 import { BackToHomeLink } from "@/components/brand/back-to-home-link";
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { Background3D } from "@/components/homepage/background-3d";

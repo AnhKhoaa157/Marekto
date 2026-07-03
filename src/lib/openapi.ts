@@ -287,6 +287,67 @@ export const openApiSpec = {
         },
         required: ["success", "data"],
       },
+      CampaignBuilderRequest: {
+        type: "object",
+        description:
+          "Campaign idea inputs. Only these fields are accepted; workspace_id and any other key is rejected. No contact records are sent to the AI provider.",
+        properties: {
+          productOrService: { type: "string", maxLength: 200, example: "Online English course for beginners" },
+          campaignGoal: { type: "string", maxLength: 300, example: "Increase signups for the July cohort" },
+          targetAudiencePrompt: {
+            type: "string",
+            maxLength: 500,
+            description: "Natural-language audience description only; never real contacts.",
+            example: "Contacts in HCM with lead score over 70 and interested in education",
+          },
+          tone: { type: "string", maxLength: 100, example: "Friendly, motivating, professional" },
+          offerOrCTA: { type: "string", maxLength: 300, example: "Register now to get 20% off" },
+          schedulePreference: { type: "string", maxLength: 200, example: "Send this Friday morning" },
+          enablePersonalization: { type: "boolean", default: false },
+        },
+        required: ["productOrService", "campaignGoal", "targetAudiencePrompt"],
+        additionalProperties: false,
+      },
+      CampaignBuilderResponse: {
+        type: "object",
+        description:
+          "A reviewable draft campaign package. It is not a delivery result and never affects dashboard metrics. Generated content is validated and sanitized before it is returned.",
+        properties: {
+          success: { type: "boolean", example: true },
+          data: {
+            type: "object",
+            properties: {
+              campaignName: { type: "string", example: "July Beginner English Signup Push" },
+              brief: { type: "string" },
+              audienceExplanation: { type: "string" },
+              targetFilters: { $ref: "#/components/schemas/CampaignTargetFilters" },
+              filtersValid: {
+                type: "boolean",
+                description:
+                  "false when unsupported suggested filters were dropped; the UI blocks the campaign draft save until the audience is corrected or all contacts are chosen.",
+              },
+              subjectIdeas: { type: "array", items: { type: "string" }, maxItems: 6 },
+              emailHtml: { type: "string", description: "Complete, editable draft HTML email content." },
+              aiContext: { $ref: "#/components/schemas/CampaignAiContext" },
+              scheduleNotes: { type: "string" },
+              warnings: { type: "array", items: { type: "string" }, maxItems: 12 },
+            },
+            required: [
+              "campaignName",
+              "brief",
+              "audienceExplanation",
+              "targetFilters",
+              "filtersValid",
+              "subjectIdeas",
+              "emailHtml",
+              "aiContext",
+              "scheduleNotes",
+              "warnings",
+            ],
+          },
+        },
+        required: ["success", "data"],
+      },
     },
     responses: {
       Unauthorized: {
@@ -568,6 +629,52 @@ export const openApiSpec = {
           "400": { $ref: "#/components/responses/BadRequest" },
           "401": { $ref: "#/components/responses/Unauthorized" },
           "500": { $ref: "#/components/responses/ServerError" },
+        },
+      },
+    },
+    "/api/ai/campaign-builder": {
+      post: {
+        tags: ["AI"],
+        summary: "Generate a reviewable campaign package",
+        description:
+          "Tenant-authenticated. Turns a campaign idea into a validated, reviewable draft package (name, brief, audience explanation, supported target_filters, subject ideas, editable email HTML, ai_context, and schedule notes) using Gemini 2.5 Flash. No contact records are sent to the provider and no delivery, sending, or scheduling occurs. The generated content is a draft the user edits and then saves through POST /api/templates and POST /api/campaigns.",
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CampaignBuilderRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Validated reviewable campaign draft package.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/CampaignBuilderResponse" },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "503": {
+            description: "AI provider is temporarily unavailable.",
+            content: {
+              "application/json": {
+                schema: { $ref: ERROR_ENVELOPE_REF },
+              },
+            },
+          },
+          "500": {
+            description:
+              "The provider returned output that could not be validated into a safe draft.",
+            content: {
+              "application/json": {
+                schema: { $ref: ERROR_ENVELOPE_REF },
+              },
+            },
+          },
         },
       },
     },

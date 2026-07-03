@@ -1,5 +1,5 @@
-import { AppShell } from "@/components/dashboard/app-shell";
-import { CampaignsManager } from "@/components/resources/campaigns-manager";
+import { AppShell } from "@/components/layout/app-shell";
+import { CampaignsManager } from "@/features/campaigns/components/campaigns-manager";
 import { requireServerAuthSession } from "@/lib/server-auth";
 
 export const dynamic = "force-dynamic";
