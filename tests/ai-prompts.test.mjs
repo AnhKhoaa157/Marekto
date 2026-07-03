@@ -33,8 +33,7 @@ test("segmentation prompt exposes an explicit name and version", () => {
 
 test("personalization prompt exposes an explicit name and version", () => {
   assert.equal(PERSONALIZATION_PROMPT_NAME, "email_personalization_v1");
-  assert.equal(typeof PERSONALIZATION_PROMPT_VERSION, "string");
-  assert.ok(PERSONALIZATION_PROMPT_VERSION.length > 0);
+  assert.equal(PERSONALIZATION_PROMPT_VERSION, "1.1.0");
 });
 
 test("segmentation instruction names every supported field and operator", () => {
@@ -152,6 +151,17 @@ test("personalization prompt includes campaign, template, and only the provided 
   assert.match(prompt, /"last_name":"Nguyen"/);
   assert.match(prompt, /"lead_score":92/);
   assert.match(prompt, /"city":"HCM"/);
+
+  const contactMarker = "Recipient contact data (JSON):\n";
+  const contactJson = JSON.parse(
+    prompt.slice(prompt.indexOf(contactMarker) + contactMarker.length),
+  );
+  assert.deepEqual(Object.keys(contactJson), [
+    "email",
+    "first_name",
+    "last_name",
+    "properties",
+  ]);
 });
 
 test("personalization prompt builder validates contact data without calling Gemini", () => {
@@ -186,18 +196,91 @@ test("personalization prompt builder validates contact data without calling Gemi
   );
 });
 
-test("personalization instruction keeps the no-hallucination rules", () => {
+test("personalization instruction defines the senior lifecycle marketing role", () => {
+  assert.match(
+    PERSONALIZATION_SYSTEM_INSTRUCTION,
+    /senior lifecycle marketing copywriter/,
+  );
+  assert.match(PERSONALIZATION_SYSTEM_INSTRUCTION, /conversion-focused/);
+});
+
+test("personalization instruction keeps the complete no-hallucination rules", () => {
   assert.match(
     PERSONALIZATION_SYSTEM_INSTRUCTION,
     /Use only the campaign, template, and contact data provided in the prompt/,
   );
   assert.match(
     PERSONALIZATION_SYSTEM_INSTRUCTION,
-    /Never invent facts, offers, discounts, or personal details that are not present in the provided data/,
+    /Never invent facts, offers, discounts, deadlines, revenue, purchase history, identities, analytics, or personal details that are not present in the provided data/,
   );
   assert.match(
     PERSONALIZATION_SYSTEM_INSTRUCTION,
     /never reference other people or other customers/,
+  );
+  assert.match(
+    PERSONALIZATION_SYSTEM_INSTRUCTION,
+    /Use only the provided contact properties/,
+  );
+  assert.match(
+    PERSONALIZATION_SYSTEM_INSTRUCTION,
+    /When information is missing, write naturally without guessing/,
+  );
+});
+
+test("personalization instruction preserves links, CTA, legal, footer, and unsubscribe", () => {
+  assert.match(
+    PERSONALIZATION_SYSTEM_INSTRUCTION,
+    /Preserve every URL and link from the template/,
+  );
+  assert.match(
+    PERSONALIZATION_SYSTEM_INSTRUCTION,
+    /Preserve unsubscribe, legal, compliance, and footer content/,
+  );
+  assert.match(
+    PERSONALIZATION_SYSTEM_INSTRUCTION,
+    /Keep the template's existing call to action/,
+  );
+  assert.match(
+    PERSONALIZATION_SYSTEM_INSTRUCTION,
+    /never create or replace a CTA URL/,
+  );
+  assert.match(PERSONALIZATION_SYSTEM_INSTRUCTION, /Do not change legal links/);
+});
+
+test("personalization instruction sets personalization-depth rules", () => {
+  assert.match(
+    PERSONALIZATION_SYSTEM_INSTRUCTION,
+    /first name only when it is available/,
+  );
+  assert.match(
+    PERSONALIZATION_SYSTEM_INSTRUCTION,
+    /Mention city, tags, or lead_score only when present and relevant/,
+  );
+  assert.match(
+    PERSONALIZATION_SYSTEM_INSTRUCTION,
+    /Do not expose raw JSON or property names/,
+  );
+});
+
+test("personalization instruction preserves template language and forbids spam", () => {
+  assert.match(
+    PERSONALIZATION_SYSTEM_INSTRUCTION,
+    /Preserve the template's language; do not translate/,
+  );
+  assert.match(
+    PERSONALIZATION_SYSTEM_INSTRUCTION,
+    /Avoid spammy wording, excessive punctuation, and misleading urgency/,
+  );
+});
+
+test("personalization instruction still requires complete HTML output", () => {
+  assert.match(
+    PERSONALIZATION_SYSTEM_INSTRUCTION,
+    /Return one JSON object with subject, body_html, and optional body_text/,
+  );
+  assert.match(
+    PERSONALIZATION_SYSTEM_INSTRUCTION,
+    /body_html must be complete HTML email content/,
   );
 });
 
