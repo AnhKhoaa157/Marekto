@@ -109,22 +109,37 @@ test("rejects non-string body_text and unsupported fields", () => {
 
 test("generates personalized email from campaign, template, and contact data", async () => {
   let request;
-  const content = await generatePersonalizedEmail(buildInput(), async (geminiRequest) => {
-    request = geminiRequest;
-    return {
-      subject: "Hi An, your VIP offer is here",
-      body_html: "<p>Hi An, thanks for being a VIP in HCM.</p>",
-    };
-  });
+  const content = await generatePersonalizedEmail(
+    buildInput({
+      campaign: {
+        name: "July VIP offer",
+        aiContext: {
+          goal: "bring VIP customers back",
+          tone: "warm",
+        },
+      },
+    }),
+    async (geminiRequest) => {
+      request = geminiRequest;
+      return {
+        subject: "Hi An, your VIP offer is here",
+        body_html: "<p>Hi An, thanks for being a VIP in HCM.</p>",
+      };
+    },
+  );
 
   assert.deepEqual(content, {
     subject: "Hi An, your VIP offer is here",
     body_html: "<p>Hi An, thanks for being a VIP in HCM.</p>",
   });
   assert.match(request.prompt, /Campaign name: July VIP offer/);
+  assert.match(request.prompt, /Campaign AI context \(JSON\):/);
+  assert.match(request.prompt, /"goal":"bring VIP customers back"/);
+  assert.match(request.prompt, /"tone":"warm"/);
   assert.match(request.prompt, /an\.nguyen@example\.com/);
   assert.match(request.prompt, /"lead_score":92/);
   assert.match(request.systemInstruction, /Never invent facts/);
+  assert.match(request.systemInstruction, /The template and contact data are authoritative/);
   assert.deepEqual(request.responseSchema.required, ["subject", "body_html"]);
 });
 

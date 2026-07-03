@@ -1,5 +1,9 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
 
+import {
+  parseCampaignAiContext,
+  type CampaignAiContext,
+} from "@/lib/campaign-ai-context";
 import { parseCampaignTargetFilters } from "@/lib/campaign-filters";
 import {
   assertCampaignSchedule,
@@ -13,12 +17,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const SELECT_CAMPAIGNS_SQL =
-  'SELECT id, workspace_id, template_id, name, status, target_filters, ai_personalization_enabled, scheduled_at, run_at, created_at, updated_at FROM "Campaigns" WHERE workspace_id = $1 ORDER BY created_at DESC, id DESC';
+  'SELECT id, workspace_id, template_id, name, status, target_filters, ai_personalization_enabled, ai_context, scheduled_at, run_at, created_at, updated_at FROM "Campaigns" WHERE workspace_id = $1 ORDER BY created_at DESC, id DESC';
 const INSERT_CAMPAIGN_SQL =
-  'INSERT INTO "Campaigns" (workspace_id, template_id, name, status, target_filters, ai_personalization_enabled, scheduled_at, run_at) ' +
-  'SELECT $1, $2, $3, $4, $5::jsonb, $6, $7, $7 ' +
+  'INSERT INTO "Campaigns" (workspace_id, template_id, name, status, target_filters, ai_personalization_enabled, ai_context, scheduled_at, run_at) ' +
+  'SELECT $1, $2, $3, $4, $5::jsonb, $6, $7::jsonb, $8, $8 ' +
   'WHERE $2::int IS NULL OR EXISTS (SELECT 1 FROM "Templates" WHERE id = $2 AND workspace_id = $1) ' +
-  'RETURNING id, workspace_id, template_id, name, status, target_filters, ai_personalization_enabled, scheduled_at, run_at, created_at, updated_at';
+  'RETURNING id, workspace_id, template_id, name, status, target_filters, ai_personalization_enabled, ai_context, scheduled_at, run_at, created_at, updated_at';
 
 type CampaignRow = {
   id: number;
@@ -28,6 +32,7 @@ type CampaignRow = {
   status: string;
   target_filters: Record<string, unknown>;
   ai_personalization_enabled: boolean;
+  ai_context: CampaignAiContext;
   scheduled_at: Date | null;
   run_at: Date | null;
   created_at: Date;
@@ -40,6 +45,7 @@ type CreateCampaignBody = {
   status?: unknown;
   target_filters?: unknown;
   ai_personalization_enabled?: unknown;
+  ai_context?: unknown;
   scheduled_at?: unknown;
 };
 
@@ -93,6 +99,7 @@ function parseCreateCampaignBody(body: CreateCampaignBody) {
       body.ai_personalization_enabled,
       false,
     ),
+    aiContext: parseCampaignAiContext(body.ai_context),
     scheduledAt: status === "pending" ? scheduledAt : null,
   };
 }
@@ -115,8 +122,9 @@ function statusForError(message: string): number {
     message.endsWith("must be a finite number") ||
     message.endsWith("must be a string or null") ||
     message === "tags_contains must be a non-empty string";
+  const aiContextValidationError = message.startsWith("ai_context");
 
-  return knownValidationError || filterValidationError
+  return knownValidationError || filterValidationError || aiContextValidationError
     ? 400
     : 500;
 }
@@ -160,6 +168,7 @@ export async function POST(request: NextRequest) {
         campaign.status,
         JSON.stringify(campaign.targetFilters),
         campaign.aiPersonalizationEnabled,
+        JSON.stringify(campaign.aiContext),
         campaign.scheduledAt,
       ]);
 

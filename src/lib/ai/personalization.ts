@@ -11,6 +11,7 @@ import {
 } from "./prompts/personalization-prompt.ts";
 
 export { PersonalizationInputError } from "./prompts/personalization-prompt.ts";
+export type { CampaignAiContext } from "../campaign-ai-context.ts";
 export type {
   PersonalizationCampaign,
   PersonalizationContact,

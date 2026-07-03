@@ -16,7 +16,7 @@ export const CLAIM_CAMPAIGN_SQL =
   "FOR UPDATE SKIP LOCKED LIMIT 1" +
   ") AND campaign.workspace_id = $1 " +
   "RETURNING campaign.id, campaign.workspace_id, campaign.template_id, campaign.name, " +
-  "campaign.target_filters, campaign.ai_personalization_enabled";
+  "campaign.target_filters, campaign.ai_personalization_enabled, campaign.ai_context";
 
 export const INSERT_EMAIL_LOG_SQL =
   'INSERT INTO "Email_logs" ' +

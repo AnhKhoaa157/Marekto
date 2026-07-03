@@ -2,6 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { resolveCampaignDeliveryContent } from "@/lib/ai/personalization";
 import {
+  parseCampaignAiContext,
+  type CampaignAiContext,
+} from "@/lib/campaign-ai-context";
+import {
   buildContactSelection,
   parseCampaignTargetFilters,
   type CampaignTargetFilters,
@@ -64,6 +68,7 @@ type ClaimedCampaignRow = {
   name: string;
   target_filters: CampaignTargetFilters | null;
   ai_personalization_enabled: boolean;
+  ai_context: unknown;
 };
 
 type ContactRow = {
@@ -288,6 +293,9 @@ async function processClaimedCampaign(
   }
 
   const { transporter, config, setupError } = createCampaignTransporter();
+  const aiContext: CampaignAiContext = campaign.ai_personalization_enabled
+    ? parseCampaignAiContext(campaign.ai_context)
+    : {};
   let emailsSent = 0;
   let emailsFailed = 0;
   let firstFailureReason: string | null = setupError;
@@ -322,7 +330,7 @@ async function processClaimedCampaign(
     try {
       const emailContent = await resolveCampaignDeliveryContent(
         {
-          campaign: { name: campaign.name },
+          campaign: { name: campaign.name, aiContext },
           template: { bodyHtml: preparedCampaign.emailHtml },
           contact: {
             email: contact.email,

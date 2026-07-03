@@ -129,6 +129,7 @@ test("email log SQL is parameterized and tenant-scoped", () => {
   assert.match(SELECT_EMAIL_LOG_SUMMARY_SQL, /workspace_id = \$1 AND campaign_id = \$2/);
   assert.match(SELECT_EMAIL_LOG_SUMMARY_SQL, /status = 'sent' AND personalization_source = 'template'/);
   assert.match(SELECT_EMAIL_LOG_SUMMARY_SQL, /personalization_error IS NOT NULL/);
+  assert.match(SELECT_CAMPAIGN_DELIVERY_SQL, /ai_context/);
   assert.match(selection.text, /log\.campaign_id = \$2/);
   assert.match(selection.text, /LEFT JOIN "Contacts"/);
   assert.match(selection.text, /LIMIT \$3/);
@@ -259,6 +260,7 @@ test("API mappings redact secrets from stored diagnostic fields", () => {
       status: "failed",
       failure_reason: "Worker failed token=stored-token stored-jwt-secret",
       ai_personalization_enabled: true,
+      ai_context: { tone: "warm" },
       scheduled_at: null,
       run_at: null,
     });
@@ -278,6 +280,7 @@ test("API mappings redact secrets from stored diagnostic fields", () => {
 
     assert.equal(campaign.failure_reason.includes("stored-token"), false);
     assert.equal(campaign.failure_reason.includes("stored-jwt-secret"), false);
+    assert.deepEqual(campaign.ai_context, { tone: "warm" });
     assert.equal(log.error_message.includes("stored-password"), false);
     assert.equal(
       log.personalization_error.includes(
