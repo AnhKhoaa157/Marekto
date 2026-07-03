@@ -28,7 +28,7 @@ const SEGMENTATION_FIELDS = [
 
 test("segmentation prompt exposes an explicit name and version", () => {
   assert.equal(SEGMENTATION_PROMPT_NAME, "segmentation_v1");
-  assert.equal(SEGMENTATION_PROMPT_VERSION, "1.1.0");
+  assert.equal(SEGMENTATION_PROMPT_VERSION, "1.2.0");
 });
 
 test("personalization prompt exposes an explicit name and version", () => {
@@ -74,6 +74,25 @@ test("segmentation instruction maps common marketing phrases to safe filters", (
   assert.match(
     SEGMENTATION_SYSTEM_INSTRUCTION,
     /lead score over 80 -> \{\"lead_score_gt\":80\}/,
+  );
+  assert.match(
+    SEGMENTATION_SYSTEM_INSTRUCTION,
+    /Tag is VIP\. City is HCM\. Lead score is over 80\. -> \{\"tags_contains\":\"VIP\",\"city\":\"HCM\",\"lead_score_gt\":80\}/,
+  );
+});
+
+test("segmentation instruction forbids collapsing multiple rules into a tag", () => {
+  assert.match(
+    SEGMENTATION_SYSTEM_INSTRUCTION,
+    /Extract every supported condition that is explicitly present/,
+  );
+  assert.match(
+    SEGMENTATION_SYSTEM_INSTRUCTION,
+    /Never collapse several supported conditions into tags_contains/,
+  );
+  assert.match(
+    SEGMENTATION_SYSTEM_INSTRUCTION,
+    /tags_contains must be "VIP", not "VIP recognised, City is HCM, Lead score is over 80"/,
   );
 });
 

@@ -42,6 +42,33 @@ test("accepts only the supported AI audience filter contract", () => {
     () => parseAiSegmentationFilters({ lead_score_gte: 101 }),
     /0-100 range/,
   );
+  assert.throws(
+    () =>
+      parseAiSegmentationFilters({
+        tags_contains: "VIP recognised, City is HCM, Lead score is over 80",
+      }),
+    /invalid tag filter/,
+  );
+  assert.throws(
+    () => parseAiSegmentationFilters({ tags_contains: "VIP customers" }),
+    /invalid tag filter/,
+  );
+});
+
+test("repairs explicit supported rules when Gemini collapses them into a tag", () => {
+  assert.deepEqual(
+    parseAiSegmentationFilters(
+      {
+        tags_contains: "VIP recognised, City is HCM, Lead score is over 80",
+      },
+      "Tag is VIP. City is HCM. Lead score is over 80.",
+    ),
+    {
+      tags_contains: "VIP",
+      city: "HCM",
+      lead_score_gt: 80,
+    },
+  );
 });
 
 test("generates structured filters and validates the provider output", async () => {
@@ -66,6 +93,21 @@ test("generates structured filters and validates the provider output", async () 
   assert.equal(request.prompt, "VIP customers in HCM with lead score over 80");
   assert.match(request.systemInstruction, /Use only city/);
   assert.equal(Object.hasOwn(request.responseSchema, "additionalProperties"), false);
+});
+
+test("generated filters include explicit prompt rules even when provider output is incomplete", async () => {
+  const filters = await generateAudienceFilters(
+    "Tag is VIP. City is HCM. Lead score is over 80.",
+    async () => ({
+      tags_contains: "VIP_customer",
+    }),
+  );
+
+  assert.deepEqual(filters, {
+    tags_contains: "VIP",
+    city: "HCM",
+    lead_score_gt: 80,
+  });
 });
 
 test("rejects invalid provider output instead of creating a fake audience", async () => {
