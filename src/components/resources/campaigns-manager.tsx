@@ -15,6 +15,12 @@ import {
   isRecord,
   requestApi,
 } from "@/lib/client-api";
+import {
+  CAMPAIGN_AI_CONTEXT_LIMITS,
+  parseCampaignAiContext,
+  type CampaignAiContext,
+  type CampaignAiContextKey,
+} from "@/lib/campaign-ai-context";
 
 type CampaignStatus = "draft" | "pending" | "processing" | "sent" | "failed";
 type DeliveryPlan = "draft" | "schedule";
@@ -33,6 +39,8 @@ type CampaignRow = {
   name: string;
   status: CampaignStatus;
   target_filters: Record<string, unknown>;
+  ai_personalization_enabled: boolean;
+  ai_context: CampaignAiContext;
   scheduled_at: string | null;
   run_at: string | null;
   created_at: string;
@@ -48,6 +56,44 @@ type SegmentationResult = {
   targetFilters: Record<string, unknown>;
   source: AudienceSource;
 };
+
+const AI_CONTEXT_FIELDS: ReadonlyArray<{
+  key: CampaignAiContextKey;
+  label: string;
+  placeholder: string;
+  multiline: boolean;
+}> = [
+  {
+    key: "goal",
+    label: "Campaign goal",
+    placeholder: "Invite VIP customers to book a product demo",
+    multiline: true,
+  },
+  {
+    key: "tone",
+    label: "Tone",
+    placeholder: "Warm, concise, and helpful",
+    multiline: false,
+  },
+  {
+    key: "cta",
+    label: "CTA intent",
+    placeholder: "Encourage the recipient to book a demo",
+    multiline: true,
+  },
+  {
+    key: "audience_description",
+    label: "Audience framing",
+    placeholder: "VIP customers in HCM with strong engagement",
+    multiline: true,
+  },
+  {
+    key: "language",
+    label: "Language",
+    placeholder: "English",
+    multiline: false,
+  },
+];
 
 function parseNullableDate(value: unknown): string | null {
   if (value === null) {
@@ -83,6 +129,7 @@ function parseCampaign(value: unknown): CampaignRow {
     (value.template_id !== null && typeof value.template_id !== "number") ||
     typeof value.name !== "string" ||
     !isRecord(value.target_filters) ||
+    typeof value.ai_personalization_enabled !== "boolean" ||
     typeof value.created_at !== "string" ||
     typeof value.updated_at !== "string"
   ) {
@@ -96,6 +143,8 @@ function parseCampaign(value: unknown): CampaignRow {
     name: value.name,
     status: parseCampaignStatus(value.status),
     target_filters: value.target_filters,
+    ai_personalization_enabled: value.ai_personalization_enabled,
+    ai_context: parseCampaignAiContext(value.ai_context),
     scheduled_at: parseNullableDate(value.scheduled_at),
     run_at: parseNullableDate(value.run_at),
     created_at: value.created_at,
@@ -319,6 +368,8 @@ export function CampaignsManager() {
   const [audiencePrompt, setAudiencePrompt] = useState("");
   const [audienceSource, setAudienceSource] = useState<AudienceSource | null>(null);
   const [targetFilters, setTargetFilters] = useState<Record<string, unknown>>({});
+  const [aiPersonalizationEnabled, setAiPersonalizationEnabled] = useState(false);
+  const [aiContext, setAiContext] = useState<CampaignAiContext>({});
   const [audienceError, setAudienceError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -413,6 +464,8 @@ export function CampaignsManager() {
     setAudiencePrompt("");
     setAudienceSource(null);
     setTargetFilters({});
+    setAiPersonalizationEnabled(false);
+    setAiContext({});
     setAudienceError(null);
     setActionError(null);
   }
@@ -431,6 +484,8 @@ export function CampaignsManager() {
     setAudiencePrompt("");
     setAudienceSource(null);
     setTargetFilters(campaign.target_filters);
+    setAiPersonalizationEnabled(campaign.ai_personalization_enabled);
+    setAiContext(campaign.ai_context);
     setAudienceError(null);
     setActionError(null);
     setSuccess(null);
@@ -469,6 +524,22 @@ export function CampaignsManager() {
     if (mode === "all") {
       setAudienceSource(null);
     }
+  }
+
+  function updateAiContext(key: CampaignAiContextKey, value: string) {
+    setAiContext((current) => {
+      const next = { ...current };
+      const normalized = value.trimStart();
+
+      if (normalized.length === 0) {
+        delete next[key];
+      } else {
+        next[key] = normalized;
+      }
+
+      return next;
+    });
+    setActionError(null);
   }
 
   async function handleGenerateAudience() {
@@ -557,6 +628,8 @@ export function CampaignsManager() {
             template_id: templateId ? Number(templateId) : null,
             scheduled_at: scheduledAt,
             target_filters: filters,
+            ai_personalization_enabled: aiPersonalizationEnabled,
+            ai_context: aiContext,
           }),
         },
         parseCampaign,
@@ -648,7 +721,7 @@ export function CampaignsManager() {
             />
           ) : null}
           {!isLoading && !loadError && campaigns.length > 0 ? (
-            <div className="overflow-x-auto">
+            <div className="marekto-scrollbar overflow-x-auto">
               <table className="w-full min-w-full text-left text-sm">
                 <thead className="border-b border-zinc-800 text-xs font-medium uppercase tracking-wide text-zinc-500">
                   <tr>
@@ -668,11 +741,18 @@ export function CampaignsManager() {
                         </p>
                       </td>
                       <td className="py-4 pr-4">
-                        <span
-                          className={`inline-flex rounded-md border px-2 py-1 text-xs font-medium ${statusClassName(campaign.status)}`}
-                        >
-                          {getStatusLabel(campaign.status)}
-                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          <span
+                            className={`inline-flex rounded-md border px-2 py-1 text-xs font-medium ${statusClassName(campaign.status)}`}
+                          >
+                            {getStatusLabel(campaign.status)}
+                          </span>
+                          {campaign.ai_personalization_enabled ? (
+                            <span className="inline-flex rounded-md border border-indigo-500/30 bg-indigo-500/10 px-2 py-1 text-xs font-medium text-indigo-200">
+                              AI personalization
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="py-4 pr-4 text-zinc-500">
                         {campaign.scheduled_at
@@ -762,6 +842,10 @@ export function CampaignsManager() {
             : "Create a draft now, or schedule delivery for later."}
         </p>
         <form className="mt-4 space-y-4" noValidate onSubmit={handleSubmit}>
+          <CampaignFormSectionHeading
+            description="Name the campaign and choose the HTML template used for delivery."
+            title="Campaign details"
+          />
           <CampaignTextInput label="Name" onChange={setName} required value={name} />
           <div className="space-y-2">
             <label className="text-sm font-medium text-zinc-200" htmlFor="campaign-template">
@@ -781,6 +865,10 @@ export function CampaignsManager() {
               ))}
             </select>
           </div>
+          <CampaignFormSectionHeading
+            description="Save a draft now or choose when the worker should deliver it."
+            title="Delivery"
+          />
           <div className="space-y-2">
             <label className="text-sm font-medium text-zinc-200" htmlFor="campaign-plan">
               Delivery plan
@@ -864,6 +952,10 @@ export function CampaignsManager() {
               </div>
             </div>
           ) : null}
+          <CampaignFormSectionHeading
+            description="Send to every contact or generate a validated AND-based audience."
+            title="Audience"
+          />
           <div className="space-y-2">
             <label className="text-sm font-medium text-zinc-200" htmlFor="campaign-audience">
               Audience
@@ -999,6 +1091,53 @@ export function CampaignsManager() {
               ) : null}
             </div>
           ) : null}
+          <fieldset className="space-y-4 rounded-md border border-zinc-800 bg-zinc-950 p-3">
+            <legend className="px-1 text-sm font-semibold text-zinc-100">
+              AI personalization
+            </legend>
+            <label className="flex cursor-pointer items-start gap-3 rounded-md border border-zinc-800 bg-zinc-900 p-3">
+              <input
+                checked={aiPersonalizationEnabled}
+                className="mt-0.5 h-4 w-4 rounded border-zinc-700 bg-zinc-950 text-indigo-600 focus:ring-2 focus:ring-indigo-400"
+                onChange={(event) => {
+                  setAiPersonalizationEnabled(event.target.checked);
+                  setActionError(null);
+                }}
+                type="checkbox"
+              />
+              <span>
+                <span className="block text-sm font-medium text-zinc-200">
+                  Personalize each recipient email with Gemini
+                </span>
+                <span className="mt-1 block text-xs leading-5 text-zinc-500">
+                  If AI is unavailable or returns invalid content, Marekto sends the
+                  original template instead.
+                </span>
+              </span>
+            </label>
+
+            {aiPersonalizationEnabled ? (
+              <div className="space-y-4 border-t border-zinc-800 pt-4">
+                <div>
+                  <p className="text-sm font-medium text-zinc-200">
+                    Campaign writing guidance
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-zinc-500">
+                    Optional guidance can shape tone and intent. It cannot create facts,
+                    offers, deadlines, URLs, legal content, or personal data.
+                  </p>
+                </div>
+                {AI_CONTEXT_FIELDS.map((field) => (
+                  <CampaignAiContextField
+                    key={field.key}
+                    field={field}
+                    onChange={(value) => updateAiContext(field.key, value)}
+                    value={aiContext[field.key] ?? ""}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </fieldset>
           {actionError ? (
             <p className="text-sm text-red-300" role="alert">
               {actionError}
@@ -1051,6 +1190,67 @@ type CampaignTextInputProps = {
   required?: boolean;
   value: string;
 };
+
+function CampaignFormSectionHeading({
+  description,
+  title,
+}: Readonly<{ description: string; title: string }>) {
+  return (
+    <div className="border-t border-zinc-800 pt-4 first:border-t-0 first:pt-0">
+      <h3 className="text-sm font-semibold text-zinc-100">{title}</h3>
+      <p className="mt-1 text-xs leading-5 text-zinc-500">{description}</p>
+    </div>
+  );
+}
+
+type CampaignAiContextFieldProps = {
+  field: (typeof AI_CONTEXT_FIELDS)[number];
+  onChange: (value: string) => void;
+  value: string;
+};
+
+function CampaignAiContextField({
+  field,
+  onChange,
+  value,
+}: Readonly<CampaignAiContextFieldProps>) {
+  const id = `campaign-ai-context-${field.key}`;
+  const sharedClassName =
+    "w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 hover:border-zinc-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30";
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <label className="text-sm font-medium text-zinc-200" htmlFor={id}>
+          {field.label}
+        </label>
+        <span className="text-xs text-zinc-600">
+          {value.length}/{CAMPAIGN_AI_CONTEXT_LIMITS[field.key]}
+        </span>
+      </div>
+      {field.multiline ? (
+        <textarea
+          className={`${sharedClassName} min-h-20 resize-y py-2`}
+          id={id}
+          maxLength={CAMPAIGN_AI_CONTEXT_LIMITS[field.key]}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={field.placeholder}
+          value={value}
+        />
+      ) : (
+        <input
+          className={`${sharedClassName} h-10`}
+          id={id}
+          maxLength={CAMPAIGN_AI_CONTEXT_LIMITS[field.key]}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={field.placeholder}
+          type="text"
+          value={value}
+        />
+      )}
+    </div>
+  );
+}
 
 function CampaignTextInput({
   label,

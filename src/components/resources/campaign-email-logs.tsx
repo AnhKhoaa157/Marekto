@@ -332,6 +332,7 @@ export function CampaignEmailLogs({ campaignId }: Readonly<CampaignEmailLogsProp
   }
 
   const schedule = data.campaign.run_at ?? data.campaign.scheduled_at;
+  const aiContextEntries = Object.entries(data.campaign.ai_context);
 
   return (
     <div className="min-w-0 space-y-6">
@@ -364,7 +365,16 @@ export function CampaignEmailLogs({ campaignId }: Readonly<CampaignEmailLogsProp
           </button>
         </div>
 
-        <dl className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {data.campaign.failure_reason ? (
+          <div className="mt-5 rounded-md border border-red-500/30 bg-red-500/10 p-3">
+            <p className="text-sm font-medium text-red-200">Campaign failure</p>
+            <p className="mt-1 break-words text-sm text-red-100/80">
+              {sanitizeEmailLogDiagnostic(data.campaign.failure_reason)}
+            </p>
+          </div>
+        ) : null}
+
+        <dl className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-md border border-zinc-800 bg-zinc-950 p-3">
             <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">
               Delivery time
@@ -383,6 +393,16 @@ export function CampaignEmailLogs({ campaignId }: Readonly<CampaignEmailLogsProp
           </div>
           <div className="rounded-md border border-zinc-800 bg-zinc-950 p-3">
             <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+              First sent
+            </dt>
+            <dd className="mt-1 text-sm font-medium text-zinc-200">
+              {data.summary.first_sent_at
+                ? formatApiDate(data.summary.first_sent_at)
+                : "No sends yet"}
+            </dd>
+          </div>
+          <div className="rounded-md border border-zinc-800 bg-zinc-950 p-3">
+            <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">
               Last sent
             </dt>
             <dd className="mt-1 text-sm font-medium text-zinc-200">
@@ -392,14 +412,37 @@ export function CampaignEmailLogs({ campaignId }: Readonly<CampaignEmailLogsProp
             </dd>
           </div>
         </dl>
+
+        {aiContextEntries.length > 0 ? (
+          <section className="mt-5 rounded-md border border-indigo-500/20 bg-indigo-500/5 p-4">
+            <h3 className="text-sm font-semibold text-indigo-100">
+              AI campaign guidance
+            </h3>
+            <p className="mt-1 text-xs leading-5 text-zinc-500">
+              Writing guidance only; template links, contact facts, and compliance
+              content remain authoritative.
+            </p>
+            <dl className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {aiContextEntries.map(([key, value]) => (
+                <div className="rounded-md border border-zinc-800 bg-zinc-950 p-3" key={key}>
+                  <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                    {key.replaceAll("_", " ")}
+                  </dt>
+                  <dd className="mt-1 break-words text-sm text-zinc-200">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        ) : null}
       </article>
 
-      <section aria-label="Delivery summary" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <section aria-label="Delivery summary" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
         <SummaryCard label="Recipients" value={data.summary.total_recipients} />
         <SummaryCard label="Sent" value={data.summary.sent_count} />
         <SummaryCard label="Failed" value={data.summary.failed_count} />
         <SummaryCard label="Gemini personalized" value={data.summary.gemini_personalized_count} />
-        <SummaryCard label="Template fallback" value={data.summary.ai_fallback_count} />
+        <SummaryCard label="Template sent" value={data.summary.template_sent_count} />
+        <SummaryCard label="AI fallback" value={data.summary.ai_fallback_count} />
       </section>
 
       <section className="min-w-0 rounded-md border border-zinc-800 bg-zinc-900 p-4 shadow-sm sm:p-6">
@@ -418,7 +461,7 @@ export function CampaignEmailLogs({ campaignId }: Readonly<CampaignEmailLogsProp
             />
           </div>
         ) : (
-          <div className="mt-4 overflow-x-auto rounded-md border border-zinc-800">
+          <div className="marekto-scrollbar mt-4 overflow-x-auto rounded-md border border-zinc-800">
             <table className="w-full min-w-full text-left text-sm">
               <thead className="border-b border-zinc-800 bg-zinc-950 text-xs font-medium uppercase tracking-wide text-zinc-500">
                 <tr>
