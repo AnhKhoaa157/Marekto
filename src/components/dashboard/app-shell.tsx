@@ -40,9 +40,9 @@ export function AppShell({
   const showHeaderControls = Boolean(headerActions) || authenticated;
 
   return (
-    <main className="h-screen overflow-hidden bg-zinc-950 text-zinc-50">
+    <main className="h-dvh overflow-hidden bg-zinc-950 text-zinc-50">
       <div className="flex h-full min-h-0 flex-col lg:flex-row">
-        <aside className="marekto-scrollbar shrink-0 overflow-y-auto border-b border-zinc-800 bg-zinc-950 px-4 py-4 lg:h-full lg:w-64 lg:border-b-0 lg:border-r lg:px-6 lg:py-6">
+        <aside className="marekto-scrollbar shrink-0 overflow-y-auto overscroll-contain border-b border-zinc-800 bg-zinc-950 px-4 py-4 lg:h-full lg:w-64 lg:border-b-0 lg:border-r lg:px-6 lg:py-6">
           <div className="flex items-center justify-between gap-4 lg:block">
             <div>
               <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
@@ -104,7 +104,7 @@ export function AppShell({
             </div>
           </header>
 
-          <div className="marekto-scrollbar min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-6 sm:px-6">
+          <div className="marekto-scrollbar min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-4 py-6 sm:px-6">
             {children}
           </div>
         </section>
