@@ -15,6 +15,7 @@ export type AppRoute =
 
 type AppShellProps = {
   activeRoute: AppRoute;
+  adminLinkVisible?: boolean;
   authenticated: boolean;
   children: ReactNode;
   eyebrow: string;
@@ -33,6 +34,7 @@ const navigationItems: ReadonlyArray<{ href: AppRoute; label: string }> = [
 ];
 
 export function AppShell({
+  adminLinkVisible = false,
   authenticated,
   children,
   eyebrow,
@@ -82,6 +84,15 @@ export function AppShell({
               <span>Automation</span>
               <span className="text-xs font-normal">Unavailable</span>
             </div>
+            {adminLinkVisible ? (
+              <Link
+                className="flex items-center justify-between gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-200 outline-none transition-colors hover:bg-amber-500/20 focus-visible:ring-2 focus-visible:ring-amber-400"
+                href="/admin"
+              >
+                <span>Admin console</span>
+                <span className="text-xs font-normal">Admin</span>
+              </Link>
+            ) : null}
           </nav>
         </aside>
 

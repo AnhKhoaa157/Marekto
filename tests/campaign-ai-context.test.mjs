@@ -79,7 +79,10 @@ test("campaign API and database schema expose ai_context", () => {
     "src/app/api/campaigns/[id]/route.ts",
   );
 
-  assert.match(dbSource, /MIGRATION_VERSION = "v10_campaign_ai_context"/);
+  // A migration version must be recorded; the exact value advances as later
+  // migrations are added (e.g. the Phase 14 admin audit log), so assert the
+  // recorded-version invariant rather than pinning one specific string.
+  assert.match(dbSource, /const MIGRATION_VERSION = "v\d+_[a-z0-9_]+";/);
   assert.match(
     dbSource,
     /ai_context JSONB NOT NULL DEFAULT '\{\}'::jsonb/,

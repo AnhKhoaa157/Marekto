@@ -12,7 +12,7 @@
 const REQUIRED_ENV_VARS = ["DATABASE_URL"] as const;
 const INITIALIZATION_TIMEOUT_MS = 60_000;
 const SLOW_QUERY_THRESHOLD_MS = 1_000;
-const MIGRATION_VERSION = "v10_campaign_ai_context";
+const MIGRATION_VERSION = "v11_admin_audit_logs";
 
 type SafeDatabaseConfig = {
   source: "DATABASE_URL";
@@ -674,6 +674,25 @@ CREATE POLICY ai_outputs_workspace_isolation ON "Ai_outputs"
   WITH CHECK (
     workspace_id = COALESCE(NULLIF(current_setting('app.current_workspace_id', true), ''), '0')::INT
   );
+
+-- Phase 14: Admin console audit trail. This is a cross-tenant SYSTEM table (like
+-- "Users"/"Workspaces"): it is deliberately NOT row-level-security protected so
+-- the non-superuser app role can read/write it outside any workspace context.
+-- It stores only sanitized, bounded metadata — never secrets or raw headers.
+CREATE TABLE IF NOT EXISTS "Admin_audit_logs" (
+  id SERIAL PRIMARY KEY,
+  admin_user_id INT NOT NULL REFERENCES "Users"(id) ON DELETE CASCADE,
+  action VARCHAR NOT NULL,
+  target_type VARCHAR NOT NULL,
+  target_id INT,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_admin_user_id
+  ON "Admin_audit_logs"(admin_user_id);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_created_at
+  ON "Admin_audit_logs"(created_at DESC);
 
 INSERT INTO "Schema_migrations" (version)
 VALUES ('${MIGRATION_VERSION}')
