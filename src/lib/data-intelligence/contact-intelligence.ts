@@ -15,7 +15,7 @@ import {
  *   - lead_score, lead_score_labels, lead_score_factors, lead_score_version:
  *     the deterministic rule-based score from the Python service
  *   - normalization_warnings: set only when non-empty
- *   - data_intelligence_status: "scored" | "unavailable"
+ *   - data_intelligence_status: "scored" | "unavailable" | "quota_exceeded"
  *
  * Safety:
  *   - `enrichContactRecord` never throws. Any configuration, network,
@@ -39,7 +39,7 @@ export type ContactRecordInput = {
   properties: Record<string, unknown>;
 };
 
-export type ContactIntelligenceStatus = "scored" | "unavailable";
+export type ContactIntelligenceStatus = "scored" | "unavailable" | "quota_exceeded";
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");

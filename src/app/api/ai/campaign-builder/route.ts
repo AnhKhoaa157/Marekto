@@ -3,8 +3,17 @@ import { NextResponse, type NextRequest } from "next/server";
 import {
   CampaignBuilderInputError,
   generateCampaignPackage,
+  parseCampaignBuilderInput,
 } from "@/lib/ai/campaign-builder";
 import { isGeminiProviderUnavailableError } from "@/lib/ai/gemini";
+import { initializeDatabase } from "@/lib/db";
+import {
+  assertWorkspaceUsageAvailable,
+  consumeWorkspaceUsage,
+  limitErrorResponse,
+  PlanLimitExceededError,
+  statusForPlanLimitError,
+} from "@/lib/entitlements";
 import { getWorkspaceIdFromHeaders } from "@/lib/workspace";
 
 export const runtime = "nodejs";
@@ -23,10 +32,21 @@ export async function POST(request: NextRequest) {
     // Trusted workspace context from the proxy/JWT. The builder never reads a
     // workspace id from the request body, and its input parser rejects any
     // workspace_id field outright.
-    getWorkspaceIdFromHeaders(request.headers);
+    await initializeDatabase();
+    const workspaceId = getWorkspaceIdFromHeaders(request.headers);
 
     const body = await parseRequestBody(request);
-    const campaignPackage = await generateCampaignPackage(body);
+    const input = parseCampaignBuilderInput(body);
+    await assertWorkspaceUsageAvailable({
+      workspaceId,
+      usageKey: "ai.campaign_builder",
+    });
+
+    const campaignPackage = await generateCampaignPackage(input);
+    await consumeWorkspaceUsage({
+      workspaceId,
+      usageKey: "ai.campaign_builder",
+    });
 
     return NextResponse.json({ success: true, data: campaignPackage });
   } catch (error) {
@@ -37,6 +57,12 @@ export async function POST(request: NextRequest) {
         { success: false, error: error.message },
         { status: 400 },
       );
+    }
+
+    if (error instanceof PlanLimitExceededError) {
+      return NextResponse.json(limitErrorResponse(error), {
+        status: statusForPlanLimitError(error) ?? 402,
+      });
     }
 
     const message =

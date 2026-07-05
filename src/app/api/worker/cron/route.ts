@@ -24,6 +24,11 @@ import {
 import { authorizeCronRequest } from "@/lib/cron-auth";
 import { initializeDatabase, query, withWorkspace } from "@/lib/db";
 import {
+  assertWorkspaceUsageAvailable,
+  consumeWorkspaceUsage,
+  PlanLimitExceededError,
+} from "@/lib/entitlements";
+import {
   createSmtpTransporter,
   isSmtpConfigured,
   resolveSmtpConfig,
@@ -328,8 +333,7 @@ async function processClaimedCampaign(
     let personalizationError: string | null = null;
 
     try {
-      const emailContent = await resolveCampaignDeliveryContent(
-        {
+      const personalizationInput = {
           campaign: { name: campaign.name, aiContext },
           template: { bodyHtml: preparedCampaign.emailHtml },
           contact: {
@@ -338,12 +342,47 @@ async function processClaimedCampaign(
             lastName: contact.last_name,
             properties: contact.properties,
           },
-        },
-        campaign.ai_personalization_enabled,
-      );
+        };
+      let quotaExceeded = false;
+
+      if (campaign.ai_personalization_enabled) {
+        try {
+          await assertWorkspaceUsageAvailable({
+            workspaceId,
+            usageKey: "ai.personalization_recipients",
+          });
+        } catch (quotaError) {
+          if (!(quotaError instanceof PlanLimitExceededError)) {
+            throw quotaError;
+          }
+
+          quotaExceeded = true;
+        }
+      }
+
+      const emailContent = quotaExceeded
+        ? {
+            ...(await resolveCampaignDeliveryContent(
+              personalizationInput,
+              false,
+            )),
+            personalizationError:
+              "AI personalization quota exceeded; raw template was used.",
+          }
+        : await resolveCampaignDeliveryContent(
+            personalizationInput,
+            campaign.ai_personalization_enabled,
+          );
 
       personalizationSource = emailContent.source;
       personalizationError = emailContent.personalizationError;
+
+      if (personalizationSource === "gemini") {
+        await consumeWorkspaceUsage({
+          workspaceId,
+          usageKey: "ai.personalization_recipients",
+        });
+      }
 
       if (personalizationError) {
         writeWorkerLog("warn", "recipient_personalization_fallback", {

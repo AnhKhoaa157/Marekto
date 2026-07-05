@@ -2,6 +2,11 @@
 
 import { enrichContactRecord } from "@/lib/data-intelligence/contact-intelligence";
 import { initializeDatabase, withWorkspace } from "@/lib/db";
+import {
+  assertWorkspaceUsageAvailable,
+  consumeWorkspaceUsage,
+  PlanLimitExceededError,
+} from "@/lib/entitlements";
 import { getWorkspaceIdFromHeaders } from "@/lib/workspace";
 
 export const runtime = "nodejs";
@@ -89,6 +94,18 @@ function isUniqueViolation(error: unknown): boolean {
   );
 }
 
+function markContactIntelligenceQuotaExceeded(
+  contact: ReturnType<typeof parseCreateContactBody>,
+) {
+  return {
+    ...contact,
+    properties: {
+      ...contact.properties,
+      data_intelligence_status: "quota_exceeded",
+    },
+  };
+}
+
 export async function GET(request: NextRequest) {
   try {
     await initializeDatabase();
@@ -124,12 +141,29 @@ export async function POST(request: NextRequest) {
 
     const workspaceId = getWorkspaceIdFromHeaders(request.headers);
     const body = (await request.json()) as CreateContactBody;
+    const parsedContact = parseCreateContactBody(body);
+    let intelligenceQuotaExceeded = false;
+
+    try {
+      await assertWorkspaceUsageAvailable({
+        workspaceId,
+        usageKey: "contact_intelligence.rows",
+      });
+    } catch (quotaError) {
+      if (!(quotaError instanceof PlanLimitExceededError)) {
+        throw quotaError;
+      }
+
+      intelligenceQuotaExceeded = true;
+    }
 
     // Enrichment happens before the workspace transaction so a slow or down
     // data-intelligence service never holds a database connection. It never
     // throws: on failure the contact is saved unchanged with
     // data_intelligence_status set to "unavailable".
-    const contact = await enrichContactRecord(parseCreateContactBody(body));
+    const contact = intelligenceQuotaExceeded
+      ? markContactIntelligenceQuotaExceeded(parsedContact)
+      : await enrichContactRecord(parsedContact);
 
     const createdContact = await withWorkspace(workspaceId, async (client) => {
       const result = await client.query<ContactRow>(INSERT_CONTACT_SQL, [
@@ -143,6 +177,17 @@ export async function POST(request: NextRequest) {
 
       return result.rows[0];
     });
+
+    if (contact.properties.data_intelligence_status === "scored") {
+      await consumeWorkspaceUsage({
+        workspaceId,
+        usageKey: "contact_intelligence.rows",
+      }).catch((usageError) => {
+        if (!(usageError instanceof PlanLimitExceededError)) {
+          throw usageError;
+        }
+      });
+    }
 
     return NextResponse.json(
       {

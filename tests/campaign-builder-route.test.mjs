@@ -9,6 +9,8 @@ const SRC_ROOT = path.resolve(import.meta.dirname, "..", "src");
 const GEMINI_URL = pathToFileURL(
   path.join(SRC_ROOT, "lib", "ai", "gemini.ts"),
 ).href;
+const DB_STUB_URL = "marekto-test:campaign-builder-db-stub";
+const ENTITLEMENTS_STUB_URL = "marekto-test:campaign-builder-entitlements-stub";
 
 const geminiStub = {
   requests: [],
@@ -16,6 +18,12 @@ const geminiStub = {
   output: null,
 };
 globalThis.__marektoBuilderGeminiStub = geminiStub;
+const entitlementStub = {
+  checks: [],
+  consumes: [],
+  mode: "ok",
+};
+globalThis.__marektoBuilderEntitlementStub = entitlementStub;
 
 // Replace only the Gemini provider module so the route exercises the real
 // input/output validation while we control provider behavior. The relative
@@ -46,8 +54,60 @@ export async function generateGeminiJson(request) {
 }
 `;
 
+const DB_STUB_SOURCE = `
+export async function initializeDatabase() {}
+`;
+
+const ENTITLEMENTS_STUB_SOURCE = `
+const state = globalThis.__marektoBuilderEntitlementStub;
+
+export class PlanLimitExceededError extends Error {
+  constructor(message, details) {
+    super(message);
+    this.name = "PlanLimitExceededError";
+    this.details = details;
+  }
+}
+
+export function limitErrorResponse(error) {
+  return {
+    success: false,
+    error: "plan_limit_exceeded",
+    message: error.message,
+    details: error.details,
+  };
+}
+
+export function statusForPlanLimitError(error) {
+  return error instanceof PlanLimitExceededError ? 402 : null;
+}
+
+export async function assertWorkspaceUsageAvailable(input) {
+  state.checks.push(input);
+  if (state.mode === "exhausted") {
+    throw new PlanLimitExceededError("Plan usage limit reached.", {
+      limit_key: input.usageKey,
+      used: 20,
+      limit: 20,
+    });
+  }
+}
+
+export async function consumeWorkspaceUsage(input) {
+  state.consumes.push(input);
+}
+`;
+
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier === "@/lib/db") {
+      return { url: DB_STUB_URL, shortCircuit: true };
+    }
+
+    if (specifier === "@/lib/entitlements") {
+      return { url: ENTITLEMENTS_STUB_URL, shortCircuit: true };
+    }
+
     if (specifier.startsWith("@/")) {
       const target = pathToFileURL(
         path.join(SRC_ROOT, `${specifier.slice(2)}.ts`),
@@ -64,6 +124,18 @@ registerHooks({
   load(url, context, nextLoad) {
     if (url === GEMINI_URL) {
       return { format: "module", source: GEMINI_STUB_SOURCE, shortCircuit: true };
+    }
+
+    if (url === DB_STUB_URL) {
+      return { format: "module", source: DB_STUB_SOURCE, shortCircuit: true };
+    }
+
+    if (url === ENTITLEMENTS_STUB_URL) {
+      return {
+        format: "module",
+        source: ENTITLEMENTS_STUB_SOURCE,
+        shortCircuit: true,
+      };
     }
 
     return nextLoad(url, context);
@@ -100,6 +172,9 @@ function resetStub(mode = "ok", output = VALID_OUTPUT) {
   geminiStub.requests = [];
   geminiStub.mode = mode;
   geminiStub.output = output;
+  entitlementStub.checks = [];
+  entitlementStub.consumes = [];
+  entitlementStub.mode = "ok";
 }
 
 function buildRequest(body, headers = { "x-workspace-id": String(WORKSPACE_ID) }) {
@@ -149,6 +224,27 @@ test("returns a validated draft package for a valid authenticated request", asyn
   assert.equal(body.data.filtersValid, true);
   assert.deepEqual(body.data.targetFilters, { city: "HCM", lead_score_gt: 70 });
   assert.equal(geminiStub.requests.length, 1);
+  assert.deepEqual(entitlementStub.checks, [
+    { workspaceId: WORKSPACE_ID, usageKey: "ai.campaign_builder" },
+  ]);
+  assert.deepEqual(entitlementStub.consumes, [
+    { workspaceId: WORKSPACE_ID, usageKey: "ai.campaign_builder" },
+  ]);
+});
+
+test("does not call Gemini when campaign-builder quota is exhausted", async (t) => {
+  t.mock.method(console, "error", () => {});
+  resetStub();
+  entitlementStub.mode = "exhausted";
+
+  const response = await POST(buildRequest(VALID_BODY));
+  const body = await response.json();
+
+  assert.equal(response.status, 402);
+  assert.equal(body.success, false);
+  assert.equal(body.error, "plan_limit_exceeded");
+  assert.equal(geminiStub.requests.length, 0);
+  assert.equal(entitlementStub.consumes.length, 0);
 });
 
 test("never sends contact records or workspace data to the provider", async () => {
@@ -173,6 +269,7 @@ test("does not accept workspace_id from the request body", async (t) => {
   assert.equal(response.status, 400);
   assert.match(body.error, /Unsupported request field: workspace_id/);
   assert.equal(geminiStub.requests.length, 0);
+  assert.equal(entitlementStub.checks.length, 0);
 });
 
 test("maps provider unavailability to a safe 503", async (t) => {

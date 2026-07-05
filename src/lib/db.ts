@@ -14,7 +14,7 @@ import { hashPassword } from "./password.ts";
 const REQUIRED_ENV_VARS = ["DATABASE_URL"] as const;
 const INITIALIZATION_TIMEOUT_MS = 60_000;
 const SLOW_QUERY_THRESHOLD_MS = 1_000;
-const MIGRATION_VERSION = "v14_uuid_identifiers";
+const MIGRATION_VERSION = "v15_limits_entitlements";
 const DEFAULT_ADMIN_EMAIL = "Admin@marekto.com";
 const DEFAULT_ADMIN_PASSWORD = "123456";
 const DEFAULT_ADMIN_ROLE = "admin";
@@ -249,6 +249,25 @@ CREATE TABLE IF NOT EXISTS "Workspace_members" (
   UNIQUE (workspace_id, user_id)
 );
 
+CREATE TABLE IF NOT EXISTS "User_entitlements" (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL UNIQUE REFERENCES "Users"(id) ON DELETE CASCADE,
+  plan_code VARCHAR NOT NULL DEFAULT 'free',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS "Workspace_subscriptions" (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL UNIQUE REFERENCES "Workspaces"(id) ON DELETE CASCADE,
+  plan_code VARCHAR NOT NULL DEFAULT 'free',
+  status VARCHAR NOT NULL DEFAULT 'active',
+  current_period_start TIMESTAMPTZ,
+  current_period_end TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS "Registration_otps" (
   email VARCHAR PRIMARY KEY,
   password_hash VARCHAR NOT NULL,
@@ -348,9 +367,24 @@ CREATE TABLE IF NOT EXISTS "Ai_outputs" (
     CHECK (status IN ('generated', 'approved', 'stale'))
 );
 
+CREATE TABLE IF NOT EXISTS "Usage_counters" (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES "Users"(id) ON DELETE SET NULL,
+  usage_key VARCHAR NOT NULL,
+  period_start DATE NOT NULL,
+  used_count INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT usage_counters_used_count_nonnegative CHECK (used_count >= 0),
+  UNIQUE NULLS NOT DISTINCT (workspace_id, user_id, usage_key, period_start)
+);
+
 CREATE INDEX IF NOT EXISTS idx_workspaces_owner_id ON "Workspaces"(owner_id);
 CREATE INDEX IF NOT EXISTS idx_workspace_members_workspace_id ON "Workspace_members"(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_workspace_members_user_id ON "Workspace_members"(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_entitlements_user_id_unique ON "User_entitlements"(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_workspace_subscriptions_workspace_id_unique ON "Workspace_subscriptions"(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_registration_otps_expires_at ON "Registration_otps"(expires_at);
 CREATE INDEX IF NOT EXISTS idx_contacts_workspace_id ON "Contacts"(workspace_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_workspace_email_unique ON "Contacts"(workspace_id, email);
@@ -373,6 +407,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_outputs_workspace_feature_input_hash_un
   ON "Ai_outputs"(workspace_id, feature, input_hash);
 CREATE INDEX IF NOT EXISTS idx_ai_outputs_output_json_gin
   ON "Ai_outputs" USING GIN (output_json);
+CREATE INDEX IF NOT EXISTS idx_usage_counters_workspace_key_period
+  ON "Usage_counters"(workspace_id, usage_key, period_start);
 
 ALTER TABLE "Users" ADD COLUMN IF NOT EXISTS first_name VARCHAR;
 ALTER TABLE "Users" ADD COLUMN IF NOT EXISTS last_name VARCHAR;
@@ -973,6 +1009,8 @@ $do$;
 CREATE INDEX IF NOT EXISTS idx_workspaces_owner_id ON "Workspaces"(owner_id);
 CREATE INDEX IF NOT EXISTS idx_workspace_members_workspace_id ON "Workspace_members"(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_workspace_members_user_id ON "Workspace_members"(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_entitlements_user_id_unique ON "User_entitlements"(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_workspace_subscriptions_workspace_id_unique ON "Workspace_subscriptions"(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_contacts_workspace_id ON "Contacts"(workspace_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_workspace_email_unique ON "Contacts"(workspace_id, email);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_workspace_id_id_unique ON "Contacts"(workspace_id, id);
@@ -989,6 +1027,7 @@ CREATE INDEX IF NOT EXISTS idx_email_logs_campaign_id ON "Email_logs"(campaign_i
 CREATE INDEX IF NOT EXISTS idx_email_logs_contact_id ON "Email_logs"(contact_id);
 CREATE INDEX IF NOT EXISTS idx_ai_outputs_workspace_feature ON "Ai_outputs"(workspace_id, feature);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_outputs_workspace_feature_input_hash_unique ON "Ai_outputs"(workspace_id, feature, input_hash);
+CREATE INDEX IF NOT EXISTS idx_usage_counters_workspace_key_period ON "Usage_counters"(workspace_id, usage_key, period_start);
 CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_admin_user_id ON "Admin_audit_logs"(admin_user_id);
 CREATE INDEX IF NOT EXISTS idx_workspace_invites_workspace_id ON "Workspace_invites"(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_workspace_audit_logs_workspace_id_created_at ON "Workspace_audit_logs"(workspace_id, created_at DESC);

@@ -2,9 +2,18 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import {
   generateAudienceFiltersWithCache,
+  parseSegmentationPrompt,
   SegmentationInputError,
   SegmentationUnavailableError,
 } from "@/lib/ai/segmentation";
+import { initializeDatabase } from "@/lib/db";
+import {
+  assertWorkspaceUsageAvailable,
+  consumeWorkspaceUsage,
+  limitErrorResponse,
+  PlanLimitExceededError,
+  statusForPlanLimitError,
+} from "@/lib/entitlements";
 import { getWorkspaceIdFromHeaders } from "@/lib/workspace";
 
 export const runtime = "nodejs";
@@ -34,10 +43,23 @@ async function parseRequestBody(request: NextRequest): Promise<SegmentationReque
 
 export async function POST(request: NextRequest) {
   try {
+    await initializeDatabase();
     const workspaceId = getWorkspaceIdFromHeaders(request.headers);
 
     const body = await parseRequestBody(request);
-    const result = await generateAudienceFiltersWithCache(workspaceId, body.prompt);
+    const prompt = parseSegmentationPrompt(body.prompt);
+    await assertWorkspaceUsageAvailable({
+      workspaceId,
+      usageKey: "ai.segmentation",
+    });
+    const result = await generateAudienceFiltersWithCache(workspaceId, prompt);
+
+    if (result.source === "gemini") {
+      await consumeWorkspaceUsage({
+        workspaceId,
+        usageKey: "ai.segmentation",
+      });
+    }
 
     return NextResponse.json({
       success: true,
@@ -54,6 +76,12 @@ export async function POST(request: NextRequest) {
         { success: false, error: error.message },
         { status: 400 },
       );
+    }
+
+    if (error instanceof PlanLimitExceededError) {
+      return NextResponse.json(limitErrorResponse(error), {
+        status: statusForPlanLimitError(error) ?? 402,
+      });
     }
 
     if (error instanceof SegmentationUnavailableError) {

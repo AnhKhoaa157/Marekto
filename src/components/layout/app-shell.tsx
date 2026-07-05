@@ -14,7 +14,8 @@ export type AppRoute =
   | "/campaign-builder"
   | "/templates"
   | "/profile"
-  | "/settings/workspace/members";
+  | "/settings/workspace/members"
+  | "/settings/billing";
 
 type AppShellProps = {
   activeRoute: AppRoute;
@@ -34,6 +35,7 @@ const navigationItems: ReadonlyArray<{ href: AppRoute; label: string }> = [
   { href: "/templates", label: "Templates" },
   { href: "/profile", label: "Profile" },
   { href: "/settings/workspace/members", label: "Members" },
+  { href: "/settings/billing", label: "Billing" },
 ];
 
 export function AppShell({
