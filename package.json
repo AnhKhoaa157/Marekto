@@ -13,7 +13,10 @@
     "smoke:live": "node scripts/run-e2e-smoke.mjs --live",
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm run lint && npm test && npm run build",
-    "postman:check": "node scripts/validate-postman.mjs"
+    "postman:check": "node scripts/validate-postman.mjs",
+    "db:migrate": "docker compose run --rm flyway migrate",
+    "db:info": "docker compose run --rm flyway info",
+    "db:validate": "docker compose run --rm flyway validate"
   },
   "engines": {
     "node": ">=22.6.0"

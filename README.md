@@ -211,7 +211,7 @@ SMTP_FROM=
 CRON_SECRET=
 ```
 
-The application initializes and migrates its database schema idempotently when an authenticated loader or API route first needs database access.
+Flyway manages versioned schema migrations from `db/migrations`. The application still keeps an idempotent startup initializer for compatibility and for the default admin seed.
 
 ### 3. Run
 
@@ -227,6 +227,7 @@ The repository includes a Docker Compose setup for local development:
 
 - `web`: Next.js app on port `3000`
 - `postgres`: PostgreSQL 16 on port `5432`
+- `flyway`: applies `db/migrations` before the web app starts
 - `data-intelligence`: internal FastAPI service on port `8080`
 
 Start the stack:
@@ -235,7 +236,15 @@ Start the stack:
 docker compose up --build
 ```
 
-Then open [http://localhost:3000](http://localhost:3000). The app initializes the database schema and default admin account when it first touches the database.
+Then open [http://localhost:3000](http://localhost:3000). Flyway applies the database schema first, and the app creates the default admin account when it first touches the database.
+
+Run database migrations or inspect migration history manually:
+
+```bash
+npm run db:migrate
+npm run db:info
+npm run db:validate
+```
 
 Docker uses safe local defaults from `docker/env.example`. To customize secrets or provider credentials without editing the committed example, copy it to a local file and point Compose at it:
 
