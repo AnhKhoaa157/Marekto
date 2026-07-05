@@ -14,10 +14,11 @@ import { hashPassword } from "./password.ts";
 const REQUIRED_ENV_VARS = ["DATABASE_URL"] as const;
 const INITIALIZATION_TIMEOUT_MS = 60_000;
 const SLOW_QUERY_THRESHOLD_MS = 1_000;
-const MIGRATION_VERSION = "v11_admin_audit_logs";
+const MIGRATION_VERSION = "v12_account_workspace_role_split";
 const DEFAULT_ADMIN_EMAIL = "Admin@marekto.com";
 const DEFAULT_ADMIN_PASSWORD = "123456";
 const DEFAULT_ADMIN_ROLE = "admin";
+const DEFAULT_ADMIN_WORKSPACE_ROLE = "owner";
 const DEFAULT_ADMIN_WORKSPACE_NAME = "Marekto Admin";
 
 type SafeDatabaseConfig = {
@@ -708,6 +709,55 @@ CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_admin_user_id
 CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_created_at
   ON "Admin_audit_logs"(created_at DESC);
 
+-- Phase 16 prep: separate system account roles from per-workspace roles.
+-- "Users".role is only for platform access; workspace ownership lives in
+-- "Workspace_members".role.
+INSERT INTO "Workspace_members" (workspace_id, user_id, role)
+SELECT w.id, w.owner_id, 'owner'
+FROM "Workspaces" w
+WHERE w.owner_id IS NOT NULL
+ON CONFLICT (workspace_id, user_id) DO UPDATE SET role = 'owner';
+
+UPDATE "Workspace_members" m
+SET role = 'owner'
+FROM "Workspaces" w
+WHERE w.id = m.workspace_id
+  AND w.owner_id = m.user_id
+  AND m.role <> 'owner';
+
+UPDATE "Workspace_members"
+SET role = 'member'
+WHERE role NOT IN ('owner', 'member');
+
+UPDATE "Users"
+SET role = 'user'
+WHERE role NOT IN ('admin', 'user');
+
+DO $do$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'users_role_allowed'
+      AND conrelid = '"Users"'::regclass
+  ) THEN
+    ALTER TABLE "Users"
+      ADD CONSTRAINT users_role_allowed CHECK (role IN ('admin', 'user'));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'workspace_members_role_allowed'
+      AND conrelid = '"Workspace_members"'::regclass
+  ) THEN
+    ALTER TABLE "Workspace_members"
+      ADD CONSTRAINT workspace_members_role_allowed
+      CHECK (role IN ('owner', 'member'));
+  END IF;
+END
+$do$;
+
 INSERT INTO "Schema_migrations" (version)
 VALUES ('${MIGRATION_VERSION}')
 ON CONFLICT (version) DO NOTHING;
@@ -866,7 +916,7 @@ async function seedDefaultAdmin(client: PoolClient): Promise<void> {
   await executeQuery(
     client,
     'INSERT INTO "Workspace_members" (workspace_id, user_id, role) VALUES ($1, $2, $3) ON CONFLICT (workspace_id, user_id) DO UPDATE SET role = EXCLUDED.role',
-    [workspaceId, adminUserId, DEFAULT_ADMIN_ROLE],
+    [workspaceId, adminUserId, DEFAULT_ADMIN_WORKSPACE_ROLE],
   );
 }
 

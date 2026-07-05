@@ -110,7 +110,7 @@ export const openApiSpec = {
         properties: {
           id: { type: "integer", example: 1 },
           email: { type: "string", format: "email", example: "user@example.com" },
-          role: { type: "string", example: "owner" },
+          role: { type: "string", example: "user" },
           first_name: { type: "string", nullable: true, example: "First" },
           last_name: { type: "string", nullable: true, example: "Last" },
           phone: { type: "string", nullable: true, example: "+84000000000" },
