@@ -215,7 +215,7 @@ test(
       client.release();
 
       if (workspaceIds.length > 0) {
-        await query('DELETE FROM "Workspaces" WHERE id = ANY($1::int[])', [workspaceIds]);
+        await query('DELETE FROM "Workspaces" WHERE id = ANY($1::uuid[])', [workspaceIds]);
       }
       if (roleCreated) {
         await query(`DROP OWNED BY ${quotedRoleName}`);

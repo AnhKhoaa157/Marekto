@@ -14,7 +14,7 @@ import { hashPassword } from "./password.ts";
 const REQUIRED_ENV_VARS = ["DATABASE_URL"] as const;
 const INITIALIZATION_TIMEOUT_MS = 60_000;
 const SLOW_QUERY_THRESHOLD_MS = 1_000;
-const MIGRATION_VERSION = "v13_workspace_collaboration";
+const MIGRATION_VERSION = "v14_uuid_identifiers";
 const DEFAULT_ADMIN_EMAIL = "Admin@marekto.com";
 const DEFAULT_ADMIN_PASSWORD = "123456";
 const DEFAULT_ADMIN_ROLE = "admin";
@@ -28,11 +28,11 @@ type SafeDatabaseConfig = {
 };
 
 type IdRow = {
-  id: number;
+  id: string;
 };
 
 type WorkspaceIdRow = {
-  workspace_id: number;
+  workspace_id: string;
 };
 
 /**
@@ -223,7 +223,7 @@ CREATE TABLE IF NOT EXISTS "Schema_migrations" (
 );
 
 CREATE TABLE IF NOT EXISTS "Users" (
-  id SERIAL PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email VARCHAR UNIQUE NOT NULL,
   password_hash VARCHAR NOT NULL,
   role VARCHAR NOT NULL,
@@ -234,16 +234,16 @@ CREATE TABLE IF NOT EXISTS "Users" (
 );
 
 CREATE TABLE IF NOT EXISTS "Workspaces" (
-  id SERIAL PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name VARCHAR NOT NULL,
-  owner_id INT REFERENCES "Users"(id) ON DELETE SET NULL,
+  owner_id UUID REFERENCES "Users"(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS "Workspace_members" (
-  id SERIAL PRIMARY KEY,
-  workspace_id INT NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
-  user_id INT NOT NULL REFERENCES "Users"(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES "Users"(id) ON DELETE CASCADE,
   role VARCHAR NOT NULL,
   joined_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (workspace_id, user_id)
@@ -261,8 +261,8 @@ CREATE TABLE IF NOT EXISTS "Registration_otps" (
 );
 
 CREATE TABLE IF NOT EXISTS "Contacts" (
-  id SERIAL PRIMARY KEY,
-  workspace_id INT NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
   email VARCHAR NOT NULL,
   first_name VARCHAR,
   last_name VARCHAR,
@@ -273,24 +273,24 @@ CREATE TABLE IF NOT EXISTS "Contacts" (
 );
 
 CREATE TABLE IF NOT EXISTS "Lists" (
-  id SERIAL PRIMARY KEY,
-  workspace_id INT NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
   name VARCHAR NOT NULL,
   description TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS "Contact_list_relation" (
-  workspace_id INT NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
-  contact_id INT NOT NULL REFERENCES "Contacts"(id) ON DELETE CASCADE,
-  list_id INT NOT NULL REFERENCES "Lists"(id) ON DELETE CASCADE,
+  workspace_id UUID NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
+  contact_id UUID NOT NULL REFERENCES "Contacts"(id) ON DELETE CASCADE,
+  list_id UUID NOT NULL REFERENCES "Lists"(id) ON DELETE CASCADE,
   added_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (contact_id, list_id)
 );
 
 CREATE TABLE IF NOT EXISTS "Templates" (
-  id SERIAL PRIMARY KEY,
-  workspace_id INT NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
   title VARCHAR,
   content TEXT,
   name VARCHAR NOT NULL DEFAULT '',
@@ -301,9 +301,9 @@ CREATE TABLE IF NOT EXISTS "Templates" (
 );
 
 CREATE TABLE IF NOT EXISTS "Campaigns" (
-  id SERIAL PRIMARY KEY,
-  workspace_id INT NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
-  template_id INT REFERENCES "Templates"(id) ON DELETE SET NULL,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
+  template_id UUID REFERENCES "Templates"(id) ON DELETE SET NULL,
   name VARCHAR NOT NULL,
   status VARCHAR NOT NULL DEFAULT 'draft',
   target_filters JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -320,10 +320,10 @@ CREATE TABLE IF NOT EXISTS "Campaigns" (
 );
 
 CREATE TABLE IF NOT EXISTS "Email_logs" (
-  id SERIAL PRIMARY KEY,
-  workspace_id INT NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
-  campaign_id INT REFERENCES "Campaigns"(id) ON DELETE SET NULL,
-  contact_id INT REFERENCES "Contacts"(id) ON DELETE SET NULL,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
+  campaign_id UUID REFERENCES "Campaigns"(id) ON DELETE SET NULL,
+  contact_id UUID REFERENCES "Contacts"(id) ON DELETE SET NULL,
   status VARCHAR NOT NULL DEFAULT 'sent',
   error_message TEXT,
   personalization_source VARCHAR(32),
@@ -332,8 +332,8 @@ CREATE TABLE IF NOT EXISTS "Email_logs" (
 );
 
 CREATE TABLE IF NOT EXISTS "Ai_outputs" (
-  id SERIAL PRIMARY KEY,
-  workspace_id INT NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
   feature VARCHAR NOT NULL,
   input_hash VARCHAR NOT NULL,
   input_text TEXT NOT NULL,
@@ -341,7 +341,7 @@ CREATE TABLE IF NOT EXISTS "Ai_outputs" (
   provider VARCHAR NOT NULL,
   model VARCHAR NOT NULL,
   status VARCHAR NOT NULL DEFAULT 'generated',
-  created_by INT REFERENCES "Users"(id) ON DELETE SET NULL,
+  created_by UUID REFERENCES "Users"(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT ai_outputs_status_check
@@ -384,10 +384,10 @@ ALTER TABLE "Contacts" FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS contacts_workspace_isolation ON "Contacts";
 CREATE POLICY contacts_workspace_isolation ON "Contacts"
   USING (
-    workspace_id = COALESCE(NULLIF(current_setting('app.current_workspace_id', true), ''), '0')::INT
+    workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), '')
   )
   WITH CHECK (
-    workspace_id = COALESCE(NULLIF(current_setting('app.current_workspace_id', true), ''), '0')::INT
+    workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), '')
   );
 
 -- Phase repair: make contact identity tenant-local instead of globally unique.
@@ -400,7 +400,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_workspace_id_id_unique
 -- Phase repair: give list/contact relations a direct tenant owner. Existing
 -- same-workspace relations are backfilled; a cross-workspace relation aborts
 -- the migration so it can be investigated instead of being silently retained.
-ALTER TABLE "Contact_list_relation" ADD COLUMN IF NOT EXISTS workspace_id INT;
+ALTER TABLE "Contact_list_relation" ADD COLUMN IF NOT EXISTS workspace_id UUID;
 ALTER TABLE "Contacts" DISABLE ROW LEVEL SECURITY;
 
 UPDATE "Contact_list_relation" relation
@@ -468,10 +468,10 @@ ALTER TABLE "Lists" FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS lists_workspace_isolation ON "Lists";
 CREATE POLICY lists_workspace_isolation ON "Lists"
   USING (
-    workspace_id = COALESCE(NULLIF(current_setting('app.current_workspace_id', true), ''), '0')::INT
+    workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), '')
   )
   WITH CHECK (
-    workspace_id = COALESCE(NULLIF(current_setting('app.current_workspace_id', true), ''), '0')::INT
+    workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), '')
   );
 
 ALTER TABLE "Contact_list_relation" ENABLE ROW LEVEL SECURITY;
@@ -479,10 +479,10 @@ ALTER TABLE "Contact_list_relation" FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS contact_list_relation_workspace_isolation ON "Contact_list_relation";
 CREATE POLICY contact_list_relation_workspace_isolation ON "Contact_list_relation"
   USING (
-    workspace_id = COALESCE(NULLIF(current_setting('app.current_workspace_id', true), ''), '0')::INT
+    workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), '')
   )
   WITH CHECK (
-    workspace_id = COALESCE(NULLIF(current_setting('app.current_workspace_id', true), ''), '0')::INT
+    workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), '')
   );
 
 -- MS-7: Evolve Templates and Campaigns (idempotent for pre-existing databases)
@@ -537,10 +537,10 @@ ALTER TABLE "Templates" FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS templates_workspace_isolation ON "Templates";
 CREATE POLICY templates_workspace_isolation ON "Templates"
   USING (
-    workspace_id = COALESCE(NULLIF(current_setting('app.current_workspace_id', true), ''), '0')::INT
+    workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), '')
   )
   WITH CHECK (
-    workspace_id = COALESCE(NULLIF(current_setting('app.current_workspace_id', true), ''), '0')::INT
+    workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), '')
   );
 
 ALTER TABLE "Campaigns" ENABLE ROW LEVEL SECURITY;
@@ -548,10 +548,10 @@ ALTER TABLE "Campaigns" FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS campaigns_workspace_isolation ON "Campaigns";
 CREATE POLICY campaigns_workspace_isolation ON "Campaigns"
   USING (
-    workspace_id = COALESCE(NULLIF(current_setting('app.current_workspace_id', true), ''), '0')::INT
+    workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), '')
   )
   WITH CHECK (
-    workspace_id = COALESCE(NULLIF(current_setting('app.current_workspace_id', true), ''), '0')::INT
+    workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), '')
   );
 
 -- MS-8: Evolve Email_logs for multi-tenant RLS (idempotent for pre-existing databases)
@@ -569,7 +569,7 @@ BEGIN
 END
 $do$;
 
-ALTER TABLE "Email_logs" ADD COLUMN IF NOT EXISTS workspace_id INT REFERENCES "Workspaces"(id) ON DELETE CASCADE;
+ALTER TABLE "Email_logs" ADD COLUMN IF NOT EXISTS workspace_id UUID REFERENCES "Workspaces"(id) ON DELETE CASCADE;
 ALTER TABLE "Email_logs" ADD COLUMN IF NOT EXISTS error_message TEXT;
 -- Phase 10.1: per-recipient AI personalization delivery observability.
 ALTER TABLE "Email_logs" ADD COLUMN IF NOT EXISTS personalization_source VARCHAR(32);
@@ -616,14 +616,14 @@ ALTER TABLE "Email_logs" FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS email_logs_workspace_isolation ON "Email_logs";
 CREATE POLICY email_logs_workspace_isolation ON "Email_logs"
   USING (
-    workspace_id = COALESCE(NULLIF(current_setting('app.current_workspace_id', true), ''), '0')::INT
+    workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), '')
   )
   WITH CHECK (
-    workspace_id = COALESCE(NULLIF(current_setting('app.current_workspace_id', true), ''), '0')::INT
+    workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), '')
   );
 
 -- Phase 6.1: Tenant-scoped AI output cache for validated provider results.
-ALTER TABLE "Ai_outputs" ADD COLUMN IF NOT EXISTS workspace_id INT REFERENCES "Workspaces"(id) ON DELETE CASCADE;
+ALTER TABLE "Ai_outputs" ADD COLUMN IF NOT EXISTS workspace_id UUID REFERENCES "Workspaces"(id) ON DELETE CASCADE;
 ALTER TABLE "Ai_outputs" ADD COLUMN IF NOT EXISTS feature VARCHAR;
 ALTER TABLE "Ai_outputs" ADD COLUMN IF NOT EXISTS input_hash VARCHAR;
 ALTER TABLE "Ai_outputs" ADD COLUMN IF NOT EXISTS input_text TEXT;
@@ -631,7 +631,7 @@ ALTER TABLE "Ai_outputs" ADD COLUMN IF NOT EXISTS output_json JSONB;
 ALTER TABLE "Ai_outputs" ADD COLUMN IF NOT EXISTS provider VARCHAR;
 ALTER TABLE "Ai_outputs" ADD COLUMN IF NOT EXISTS model VARCHAR;
 ALTER TABLE "Ai_outputs" ADD COLUMN IF NOT EXISTS status VARCHAR NOT NULL DEFAULT 'generated';
-ALTER TABLE "Ai_outputs" ADD COLUMN IF NOT EXISTS created_by INT REFERENCES "Users"(id) ON DELETE SET NULL;
+ALTER TABLE "Ai_outputs" ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES "Users"(id) ON DELETE SET NULL;
 ALTER TABLE "Ai_outputs" ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
 ALTER TABLE "Ai_outputs" ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
 
@@ -684,10 +684,10 @@ ALTER TABLE "Ai_outputs" FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS ai_outputs_workspace_isolation ON "Ai_outputs";
 CREATE POLICY ai_outputs_workspace_isolation ON "Ai_outputs"
   USING (
-    workspace_id = COALESCE(NULLIF(current_setting('app.current_workspace_id', true), ''), '0')::INT
+    workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), '')
   )
   WITH CHECK (
-    workspace_id = COALESCE(NULLIF(current_setting('app.current_workspace_id', true), ''), '0')::INT
+    workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), '')
   );
 
 -- Phase 14: Admin console audit trail. This is a cross-tenant SYSTEM table (like
@@ -695,11 +695,11 @@ CREATE POLICY ai_outputs_workspace_isolation ON "Ai_outputs"
 -- the non-superuser app role can read/write it outside any workspace context.
 -- It stores only sanitized, bounded metadata — never secrets or raw headers.
 CREATE TABLE IF NOT EXISTS "Admin_audit_logs" (
-  id SERIAL PRIMARY KEY,
-  admin_user_id INT NOT NULL REFERENCES "Users"(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  admin_user_id UUID NOT NULL REFERENCES "Users"(id) ON DELETE CASCADE,
   action VARCHAR NOT NULL,
   target_type VARCHAR NOT NULL,
-  target_id INT,
+  target_id UUID,
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -713,10 +713,10 @@ CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_created_at
 ALTER TABLE "Registration_otps" ALTER COLUMN workspace_name DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS "Workspace_invites" (
-  id SERIAL PRIMARY KEY,
-  workspace_id INT NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
   token_hash VARCHAR UNIQUE NOT NULL,
-  created_by_user_id INT NOT NULL REFERENCES "Users"(id) ON DELETE CASCADE,
+  created_by_user_id UUID NOT NULL REFERENCES "Users"(id) ON DELETE CASCADE,
   expires_at TIMESTAMPTZ NOT NULL,
   revoked_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -728,11 +728,11 @@ CREATE INDEX IF NOT EXISTS idx_workspace_invites_token_hash
   ON "Workspace_invites"(token_hash);
 
 CREATE TABLE IF NOT EXISTS "Workspace_audit_logs" (
-  id SERIAL PRIMARY KEY,
-  workspace_id INT NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
-  actor_user_id INT REFERENCES "Users"(id) ON DELETE SET NULL,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
+  actor_user_id UUID REFERENCES "Users"(id) ON DELETE SET NULL,
   target_type VARCHAR NOT NULL,
-  target_id INT,
+  target_id UUID,
   action VARCHAR NOT NULL,
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -766,6 +766,293 @@ WHERE role NOT IN ('owner', 'member');
 UPDATE "Users"
 SET role = 'user'
 WHERE role NOT IN ('admin', 'user');
+
+-- Technical migration: replace every internal integer entity identifier with
+-- UUID while preserving existing rows and their relationships.
+DO $do$
+DECLARE
+  users_id_type TEXT;
+BEGIN
+  SELECT data_type INTO users_id_type
+  FROM information_schema.columns
+  WHERE table_schema = 'public' AND table_name = 'Users' AND column_name = 'id';
+
+  IF users_id_type IN ('integer', 'bigint', 'smallint') THEN
+    ALTER TABLE "Contacts" DISABLE ROW LEVEL SECURITY;
+    ALTER TABLE "Lists" DISABLE ROW LEVEL SECURITY;
+    ALTER TABLE "Contact_list_relation" DISABLE ROW LEVEL SECURITY;
+    ALTER TABLE "Templates" DISABLE ROW LEVEL SECURITY;
+    ALTER TABLE "Campaigns" DISABLE ROW LEVEL SECURITY;
+    ALTER TABLE "Email_logs" DISABLE ROW LEVEL SECURITY;
+    ALTER TABLE "Ai_outputs" DISABLE ROW LEVEL SECURITY;
+
+    ALTER TABLE "Users" ADD COLUMN id_uuid UUID NOT NULL DEFAULT gen_random_uuid();
+    ALTER TABLE "Workspaces" ADD COLUMN id_uuid UUID NOT NULL DEFAULT gen_random_uuid();
+    ALTER TABLE "Workspace_members" ADD COLUMN id_uuid UUID NOT NULL DEFAULT gen_random_uuid();
+    ALTER TABLE "Contacts" ADD COLUMN id_uuid UUID NOT NULL DEFAULT gen_random_uuid();
+    ALTER TABLE "Lists" ADD COLUMN id_uuid UUID NOT NULL DEFAULT gen_random_uuid();
+    ALTER TABLE "Templates" ADD COLUMN id_uuid UUID NOT NULL DEFAULT gen_random_uuid();
+    ALTER TABLE "Campaigns" ADD COLUMN id_uuid UUID NOT NULL DEFAULT gen_random_uuid();
+    ALTER TABLE "Email_logs" ADD COLUMN id_uuid UUID NOT NULL DEFAULT gen_random_uuid();
+    ALTER TABLE "Ai_outputs" ADD COLUMN id_uuid UUID NOT NULL DEFAULT gen_random_uuid();
+    ALTER TABLE "Admin_audit_logs" ADD COLUMN id_uuid UUID NOT NULL DEFAULT gen_random_uuid();
+    ALTER TABLE "Workspace_invites" ADD COLUMN id_uuid UUID NOT NULL DEFAULT gen_random_uuid();
+    ALTER TABLE "Workspace_audit_logs" ADD COLUMN id_uuid UUID NOT NULL DEFAULT gen_random_uuid();
+
+    ALTER TABLE "Workspaces" ADD COLUMN owner_id_uuid UUID;
+    ALTER TABLE "Workspace_members" ADD COLUMN workspace_id_uuid UUID;
+    ALTER TABLE "Workspace_members" ADD COLUMN user_id_uuid UUID;
+    ALTER TABLE "Contacts" ADD COLUMN workspace_id_uuid UUID;
+    ALTER TABLE "Lists" ADD COLUMN workspace_id_uuid UUID;
+    ALTER TABLE "Contact_list_relation" ADD COLUMN workspace_id_uuid UUID;
+    ALTER TABLE "Contact_list_relation" ADD COLUMN contact_id_uuid UUID;
+    ALTER TABLE "Contact_list_relation" ADD COLUMN list_id_uuid UUID;
+    ALTER TABLE "Templates" ADD COLUMN workspace_id_uuid UUID;
+    ALTER TABLE "Campaigns" ADD COLUMN workspace_id_uuid UUID;
+    ALTER TABLE "Campaigns" ADD COLUMN template_id_uuid UUID;
+    ALTER TABLE "Email_logs" ADD COLUMN workspace_id_uuid UUID;
+    ALTER TABLE "Email_logs" ADD COLUMN campaign_id_uuid UUID;
+    ALTER TABLE "Email_logs" ADD COLUMN contact_id_uuid UUID;
+    ALTER TABLE "Ai_outputs" ADD COLUMN workspace_id_uuid UUID;
+    ALTER TABLE "Ai_outputs" ADD COLUMN created_by_uuid UUID;
+    ALTER TABLE "Admin_audit_logs" ADD COLUMN admin_user_id_uuid UUID;
+    ALTER TABLE "Admin_audit_logs" ADD COLUMN target_id_uuid UUID;
+    ALTER TABLE "Workspace_invites" ADD COLUMN workspace_id_uuid UUID;
+    ALTER TABLE "Workspace_invites" ADD COLUMN created_by_user_id_uuid UUID;
+    ALTER TABLE "Workspace_audit_logs" ADD COLUMN workspace_id_uuid UUID;
+    ALTER TABLE "Workspace_audit_logs" ADD COLUMN actor_user_id_uuid UUID;
+    ALTER TABLE "Workspace_audit_logs" ADD COLUMN target_id_uuid UUID;
+
+    UPDATE "Workspaces" w SET owner_id_uuid = u.id_uuid
+    FROM "Users" u WHERE u.id = w.owner_id;
+    UPDATE "Workspace_members" m SET workspace_id_uuid = w.id_uuid, user_id_uuid = u.id_uuid
+    FROM "Workspaces" w, "Users" u WHERE w.id = m.workspace_id AND u.id = m.user_id;
+    UPDATE "Contacts" c SET workspace_id_uuid = w.id_uuid
+    FROM "Workspaces" w WHERE w.id = c.workspace_id;
+    UPDATE "Lists" l SET workspace_id_uuid = w.id_uuid
+    FROM "Workspaces" w WHERE w.id = l.workspace_id;
+    UPDATE "Contact_list_relation" r
+    SET workspace_id_uuid = w.id_uuid, contact_id_uuid = c.id_uuid, list_id_uuid = l.id_uuid
+    FROM "Workspaces" w, "Contacts" c, "Lists" l
+    WHERE w.id = r.workspace_id AND c.id = r.contact_id AND l.id = r.list_id;
+    UPDATE "Templates" t SET workspace_id_uuid = w.id_uuid
+    FROM "Workspaces" w WHERE w.id = t.workspace_id;
+    UPDATE "Campaigns" c SET workspace_id_uuid = w.id_uuid
+    FROM "Workspaces" w WHERE w.id = c.workspace_id;
+    UPDATE "Campaigns" c SET template_id_uuid = t.id_uuid
+    FROM "Templates" t WHERE t.id = c.template_id;
+    UPDATE "Email_logs" e SET workspace_id_uuid = w.id_uuid
+    FROM "Workspaces" w WHERE w.id = e.workspace_id;
+    UPDATE "Email_logs" e SET campaign_id_uuid = c.id_uuid
+    FROM "Campaigns" c WHERE c.id = e.campaign_id;
+    UPDATE "Email_logs" e SET contact_id_uuid = c.id_uuid
+    FROM "Contacts" c WHERE c.id = e.contact_id;
+    UPDATE "Ai_outputs" a SET workspace_id_uuid = w.id_uuid
+    FROM "Workspaces" w WHERE w.id = a.workspace_id;
+    UPDATE "Ai_outputs" a SET created_by_uuid = u.id_uuid
+    FROM "Users" u WHERE u.id = a.created_by;
+    UPDATE "Admin_audit_logs" a SET admin_user_id_uuid = u.id_uuid
+    FROM "Users" u WHERE u.id = a.admin_user_id;
+    UPDATE "Admin_audit_logs" a SET target_id_uuid = w.id_uuid
+    FROM "Workspaces" w WHERE a.target_type = 'workspace' AND w.id = a.target_id;
+    UPDATE "Workspace_invites" i SET workspace_id_uuid = w.id_uuid, created_by_user_id_uuid = u.id_uuid
+    FROM "Workspaces" w, "Users" u
+    WHERE w.id = i.workspace_id AND u.id = i.created_by_user_id;
+    UPDATE "Workspace_audit_logs" a SET workspace_id_uuid = w.id_uuid
+    FROM "Workspaces" w WHERE w.id = a.workspace_id;
+    UPDATE "Workspace_audit_logs" a SET actor_user_id_uuid = u.id_uuid
+    FROM "Users" u WHERE u.id = a.actor_user_id;
+    UPDATE "Workspace_audit_logs" a SET target_id_uuid = w.id_uuid
+    FROM "Workspaces" w WHERE a.target_type = 'workspace' AND w.id = a.target_id;
+    UPDATE "Workspace_audit_logs" a SET target_id_uuid = u.id_uuid
+    FROM "Users" u WHERE a.target_type = 'member' AND u.id = a.target_id;
+    UPDATE "Workspace_audit_logs" a SET target_id_uuid = i.id_uuid
+    FROM "Workspace_invites" i WHERE a.target_type = 'invite' AND i.id = a.target_id;
+
+    ALTER TABLE "Users" DROP COLUMN id CASCADE;
+    ALTER TABLE "Workspaces" DROP COLUMN id CASCADE, DROP COLUMN owner_id CASCADE;
+    ALTER TABLE "Workspace_members" DROP COLUMN id CASCADE, DROP COLUMN workspace_id CASCADE, DROP COLUMN user_id CASCADE;
+    ALTER TABLE "Contacts" DROP COLUMN id CASCADE, DROP COLUMN workspace_id CASCADE;
+    ALTER TABLE "Lists" DROP COLUMN id CASCADE, DROP COLUMN workspace_id CASCADE;
+    ALTER TABLE "Contact_list_relation" DROP COLUMN workspace_id CASCADE, DROP COLUMN contact_id CASCADE, DROP COLUMN list_id CASCADE;
+    ALTER TABLE "Templates" DROP COLUMN id CASCADE, DROP COLUMN workspace_id CASCADE;
+    ALTER TABLE "Campaigns" DROP COLUMN id CASCADE, DROP COLUMN workspace_id CASCADE, DROP COLUMN template_id CASCADE;
+    ALTER TABLE "Email_logs" DROP COLUMN id CASCADE, DROP COLUMN workspace_id CASCADE, DROP COLUMN campaign_id CASCADE, DROP COLUMN contact_id CASCADE;
+    ALTER TABLE "Ai_outputs" DROP COLUMN id CASCADE, DROP COLUMN workspace_id CASCADE, DROP COLUMN created_by CASCADE;
+    ALTER TABLE "Admin_audit_logs" DROP COLUMN id CASCADE, DROP COLUMN admin_user_id CASCADE, DROP COLUMN target_id CASCADE;
+    ALTER TABLE "Workspace_invites" DROP COLUMN id CASCADE, DROP COLUMN workspace_id CASCADE, DROP COLUMN created_by_user_id CASCADE;
+    ALTER TABLE "Workspace_audit_logs" DROP COLUMN id CASCADE, DROP COLUMN workspace_id CASCADE, DROP COLUMN actor_user_id CASCADE, DROP COLUMN target_id CASCADE;
+
+    ALTER TABLE "Users" RENAME COLUMN id_uuid TO id;
+    ALTER TABLE "Workspaces" RENAME COLUMN id_uuid TO id;
+    ALTER TABLE "Workspaces" RENAME COLUMN owner_id_uuid TO owner_id;
+    ALTER TABLE "Workspace_members" RENAME COLUMN id_uuid TO id;
+    ALTER TABLE "Workspace_members" RENAME COLUMN workspace_id_uuid TO workspace_id;
+    ALTER TABLE "Workspace_members" RENAME COLUMN user_id_uuid TO user_id;
+    ALTER TABLE "Contacts" RENAME COLUMN id_uuid TO id;
+    ALTER TABLE "Contacts" RENAME COLUMN workspace_id_uuid TO workspace_id;
+    ALTER TABLE "Lists" RENAME COLUMN id_uuid TO id;
+    ALTER TABLE "Lists" RENAME COLUMN workspace_id_uuid TO workspace_id;
+    ALTER TABLE "Contact_list_relation" RENAME COLUMN workspace_id_uuid TO workspace_id;
+    ALTER TABLE "Contact_list_relation" RENAME COLUMN contact_id_uuid TO contact_id;
+    ALTER TABLE "Contact_list_relation" RENAME COLUMN list_id_uuid TO list_id;
+    ALTER TABLE "Templates" RENAME COLUMN id_uuid TO id;
+    ALTER TABLE "Templates" RENAME COLUMN workspace_id_uuid TO workspace_id;
+    ALTER TABLE "Campaigns" RENAME COLUMN id_uuid TO id;
+    ALTER TABLE "Campaigns" RENAME COLUMN workspace_id_uuid TO workspace_id;
+    ALTER TABLE "Campaigns" RENAME COLUMN template_id_uuid TO template_id;
+    ALTER TABLE "Email_logs" RENAME COLUMN id_uuid TO id;
+    ALTER TABLE "Email_logs" RENAME COLUMN workspace_id_uuid TO workspace_id;
+    ALTER TABLE "Email_logs" RENAME COLUMN campaign_id_uuid TO campaign_id;
+    ALTER TABLE "Email_logs" RENAME COLUMN contact_id_uuid TO contact_id;
+    ALTER TABLE "Ai_outputs" RENAME COLUMN id_uuid TO id;
+    ALTER TABLE "Ai_outputs" RENAME COLUMN workspace_id_uuid TO workspace_id;
+    ALTER TABLE "Ai_outputs" RENAME COLUMN created_by_uuid TO created_by;
+    ALTER TABLE "Admin_audit_logs" RENAME COLUMN id_uuid TO id;
+    ALTER TABLE "Admin_audit_logs" RENAME COLUMN admin_user_id_uuid TO admin_user_id;
+    ALTER TABLE "Admin_audit_logs" RENAME COLUMN target_id_uuid TO target_id;
+    ALTER TABLE "Workspace_invites" RENAME COLUMN id_uuid TO id;
+    ALTER TABLE "Workspace_invites" RENAME COLUMN workspace_id_uuid TO workspace_id;
+    ALTER TABLE "Workspace_invites" RENAME COLUMN created_by_user_id_uuid TO created_by_user_id;
+    ALTER TABLE "Workspace_audit_logs" RENAME COLUMN id_uuid TO id;
+    ALTER TABLE "Workspace_audit_logs" RENAME COLUMN workspace_id_uuid TO workspace_id;
+    ALTER TABLE "Workspace_audit_logs" RENAME COLUMN actor_user_id_uuid TO actor_user_id;
+    ALTER TABLE "Workspace_audit_logs" RENAME COLUMN target_id_uuid TO target_id;
+
+    ALTER TABLE "Users" ADD PRIMARY KEY (id);
+    ALTER TABLE "Workspaces" ADD PRIMARY KEY (id);
+    ALTER TABLE "Workspace_members" ADD PRIMARY KEY (id), ADD UNIQUE (workspace_id, user_id);
+    ALTER TABLE "Contacts" ADD PRIMARY KEY (id), ADD CONSTRAINT contacts_workspace_email_unique UNIQUE (workspace_id, email);
+    ALTER TABLE "Lists" ADD PRIMARY KEY (id);
+    ALTER TABLE "Contact_list_relation" ADD PRIMARY KEY (contact_id, list_id);
+    ALTER TABLE "Templates" ADD PRIMARY KEY (id);
+    ALTER TABLE "Campaigns" ADD PRIMARY KEY (id);
+    ALTER TABLE "Email_logs" ADD PRIMARY KEY (id);
+    ALTER TABLE "Ai_outputs" ADD PRIMARY KEY (id);
+    ALTER TABLE "Admin_audit_logs" ADD PRIMARY KEY (id);
+    ALTER TABLE "Workspace_invites" ADD PRIMARY KEY (id);
+    ALTER TABLE "Workspace_audit_logs" ADD PRIMARY KEY (id);
+
+    ALTER TABLE "Workspaces" ADD FOREIGN KEY (owner_id) REFERENCES "Users"(id) ON DELETE SET NULL;
+    ALTER TABLE "Workspace_members" ADD FOREIGN KEY (workspace_id) REFERENCES "Workspaces"(id) ON DELETE CASCADE,
+      ADD FOREIGN KEY (user_id) REFERENCES "Users"(id) ON DELETE CASCADE;
+    ALTER TABLE "Contacts" ADD FOREIGN KEY (workspace_id) REFERENCES "Workspaces"(id) ON DELETE CASCADE;
+    ALTER TABLE "Lists" ADD FOREIGN KEY (workspace_id) REFERENCES "Workspaces"(id) ON DELETE CASCADE;
+    ALTER TABLE "Contact_list_relation" ADD CONSTRAINT contact_list_relation_workspace_fk FOREIGN KEY (workspace_id) REFERENCES "Workspaces"(id) ON DELETE CASCADE,
+      ADD FOREIGN KEY (contact_id) REFERENCES "Contacts"(id) ON DELETE CASCADE,
+      ADD FOREIGN KEY (list_id) REFERENCES "Lists"(id) ON DELETE CASCADE;
+    ALTER TABLE "Templates" ADD FOREIGN KEY (workspace_id) REFERENCES "Workspaces"(id) ON DELETE CASCADE;
+    ALTER TABLE "Campaigns" ADD FOREIGN KEY (workspace_id) REFERENCES "Workspaces"(id) ON DELETE CASCADE,
+      ADD FOREIGN KEY (template_id) REFERENCES "Templates"(id) ON DELETE SET NULL;
+    ALTER TABLE "Email_logs" ADD FOREIGN KEY (workspace_id) REFERENCES "Workspaces"(id) ON DELETE CASCADE,
+      ADD FOREIGN KEY (campaign_id) REFERENCES "Campaigns"(id) ON DELETE SET NULL,
+      ADD CONSTRAINT email_logs_contact_id_fkey FOREIGN KEY (contact_id) REFERENCES "Contacts"(id) ON DELETE SET NULL;
+    ALTER TABLE "Ai_outputs" ADD FOREIGN KEY (workspace_id) REFERENCES "Workspaces"(id) ON DELETE CASCADE,
+      ADD FOREIGN KEY (created_by) REFERENCES "Users"(id) ON DELETE SET NULL;
+    ALTER TABLE "Admin_audit_logs" ADD FOREIGN KEY (admin_user_id) REFERENCES "Users"(id) ON DELETE CASCADE;
+    ALTER TABLE "Workspace_invites" ADD FOREIGN KEY (workspace_id) REFERENCES "Workspaces"(id) ON DELETE CASCADE,
+      ADD FOREIGN KEY (created_by_user_id) REFERENCES "Users"(id) ON DELETE CASCADE;
+    ALTER TABLE "Workspace_audit_logs" ADD FOREIGN KEY (workspace_id) REFERENCES "Workspaces"(id) ON DELETE CASCADE,
+      ADD FOREIGN KEY (actor_user_id) REFERENCES "Users"(id) ON DELETE SET NULL;
+
+    ALTER TABLE "Workspace_members" ALTER COLUMN workspace_id SET NOT NULL, ALTER COLUMN user_id SET NOT NULL;
+    ALTER TABLE "Contacts" ALTER COLUMN workspace_id SET NOT NULL;
+    ALTER TABLE "Lists" ALTER COLUMN workspace_id SET NOT NULL;
+    ALTER TABLE "Contact_list_relation" ALTER COLUMN workspace_id SET NOT NULL, ALTER COLUMN contact_id SET NOT NULL, ALTER COLUMN list_id SET NOT NULL;
+    ALTER TABLE "Templates" ALTER COLUMN workspace_id SET NOT NULL;
+    ALTER TABLE "Campaigns" ALTER COLUMN workspace_id SET NOT NULL;
+    ALTER TABLE "Email_logs" ALTER COLUMN workspace_id SET NOT NULL;
+    ALTER TABLE "Ai_outputs" ALTER COLUMN workspace_id SET NOT NULL;
+    ALTER TABLE "Admin_audit_logs" ALTER COLUMN admin_user_id SET NOT NULL;
+    ALTER TABLE "Workspace_invites" ALTER COLUMN workspace_id SET NOT NULL, ALTER COLUMN created_by_user_id SET NOT NULL;
+    ALTER TABLE "Workspace_audit_logs" ALTER COLUMN workspace_id SET NOT NULL;
+  END IF;
+END
+$do$;
+
+CREATE INDEX IF NOT EXISTS idx_workspaces_owner_id ON "Workspaces"(owner_id);
+CREATE INDEX IF NOT EXISTS idx_workspace_members_workspace_id ON "Workspace_members"(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_workspace_members_user_id ON "Workspace_members"(user_id);
+CREATE INDEX IF NOT EXISTS idx_contacts_workspace_id ON "Contacts"(workspace_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_workspace_email_unique ON "Contacts"(workspace_id, email);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_workspace_id_id_unique ON "Contacts"(workspace_id, id);
+CREATE INDEX IF NOT EXISTS idx_lists_workspace_id ON "Lists"(workspace_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_lists_workspace_id_id_unique ON "Lists"(workspace_id, id);
+CREATE INDEX IF NOT EXISTS idx_contact_list_relation_list_id ON "Contact_list_relation"(list_id);
+CREATE INDEX IF NOT EXISTS idx_contact_list_relation_workspace_id ON "Contact_list_relation"(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_templates_workspace_id ON "Templates"(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_campaigns_workspace_id ON "Campaigns"(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_campaigns_due ON "Campaigns"(workspace_id, status, run_at);
+CREATE INDEX IF NOT EXISTS idx_campaigns_template_id ON "Campaigns"(template_id);
+CREATE INDEX IF NOT EXISTS idx_email_logs_workspace_id ON "Email_logs"(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_email_logs_campaign_id ON "Email_logs"(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_email_logs_contact_id ON "Email_logs"(contact_id);
+CREATE INDEX IF NOT EXISTS idx_ai_outputs_workspace_feature ON "Ai_outputs"(workspace_id, feature);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_outputs_workspace_feature_input_hash_unique ON "Ai_outputs"(workspace_id, feature, input_hash);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_admin_user_id ON "Admin_audit_logs"(admin_user_id);
+CREATE INDEX IF NOT EXISTS idx_workspace_invites_workspace_id ON "Workspace_invites"(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_workspace_audit_logs_workspace_id_created_at ON "Workspace_audit_logs"(workspace_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_workspace_audit_logs_actor_user_id ON "Workspace_audit_logs"(actor_user_id);
+
+DO $do$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'contact_list_relation_contact_workspace_fk') THEN
+    ALTER TABLE "Contact_list_relation"
+      ADD CONSTRAINT contact_list_relation_contact_workspace_fk
+      FOREIGN KEY (workspace_id, contact_id)
+      REFERENCES "Contacts"(workspace_id, id) ON DELETE CASCADE;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'contact_list_relation_list_workspace_fk') THEN
+    ALTER TABLE "Contact_list_relation"
+      ADD CONSTRAINT contact_list_relation_list_workspace_fk
+      FOREIGN KEY (workspace_id, list_id)
+      REFERENCES "Lists"(workspace_id, id) ON DELETE CASCADE;
+  END IF;
+END
+$do$;
+
+ALTER TABLE "Contacts" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Contacts" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS contacts_workspace_isolation ON "Contacts";
+CREATE POLICY contacts_workspace_isolation ON "Contacts"
+  USING (workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), ''))
+  WITH CHECK (workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), ''));
+ALTER TABLE "Lists" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Lists" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS lists_workspace_isolation ON "Lists";
+CREATE POLICY lists_workspace_isolation ON "Lists"
+  USING (workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), ''))
+  WITH CHECK (workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), ''));
+ALTER TABLE "Contact_list_relation" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Contact_list_relation" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS contact_list_relation_workspace_isolation ON "Contact_list_relation";
+CREATE POLICY contact_list_relation_workspace_isolation ON "Contact_list_relation"
+  USING (workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), ''))
+  WITH CHECK (workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), ''));
+ALTER TABLE "Templates" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Templates" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS templates_workspace_isolation ON "Templates";
+CREATE POLICY templates_workspace_isolation ON "Templates"
+  USING (workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), ''))
+  WITH CHECK (workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), ''));
+ALTER TABLE "Campaigns" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Campaigns" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS campaigns_workspace_isolation ON "Campaigns";
+CREATE POLICY campaigns_workspace_isolation ON "Campaigns"
+  USING (workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), ''))
+  WITH CHECK (workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), ''));
+ALTER TABLE "Email_logs" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Email_logs" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS email_logs_workspace_isolation ON "Email_logs";
+CREATE POLICY email_logs_workspace_isolation ON "Email_logs"
+  USING (workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), ''))
+  WITH CHECK (workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), ''));
+ALTER TABLE "Ai_outputs" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Ai_outputs" FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS ai_outputs_workspace_isolation ON "Ai_outputs";
+CREATE POLICY ai_outputs_workspace_isolation ON "Ai_outputs"
+  USING (workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), ''))
+  WITH CHECK (workspace_id::text = NULLIF(current_setting('app.current_workspace_id', true), ''));
 
 DO $do$
 BEGIN
@@ -1040,7 +1327,7 @@ export async function getDbClient(): Promise<PoolClient> {
 }
 
 export async function withWorkspace<T>(
-  workspaceId: number,
+  workspaceId: string,
   callback: (client: PoolClient) => Promise<T>,
 ): Promise<T> {
   registerShutdownHandler();

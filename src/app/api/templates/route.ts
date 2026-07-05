@@ -12,8 +12,8 @@ const INSERT_TEMPLATE_SQL =
   'INSERT INTO "Templates" (workspace_id, name, body_html, body_json) VALUES ($1, $2, $3, $4::jsonb) RETURNING id, workspace_id, name, body_html, body_json, created_at, updated_at';
 
 type TemplateRow = {
-  id: number;
-  workspace_id: number;
+  id: string;
+  workspace_id: string;
   name: string;
   body_html: string;
   body_json: Record<string, unknown>;

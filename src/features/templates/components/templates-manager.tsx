@@ -14,10 +14,11 @@ import {
   isRecord,
   requestApi,
 } from "@/lib/client-api";
+import { formatEntityCode } from "@/lib/identifiers";
 
 export type TemplateRow = {
-  id: number;
-  workspace_id: number;
+  id: string;
+  workspace_id: string;
   name: string;
   body_html: string;
   body_json: Record<string, unknown>;
@@ -28,8 +29,8 @@ export type TemplateRow = {
 export function parseTemplate(value: unknown): TemplateRow {
   if (
     !isRecord(value) ||
-    typeof value.id !== "number" ||
-    typeof value.workspace_id !== "number" ||
+    typeof value.id !== "string" ||
+    typeof value.workspace_id !== "string" ||
     typeof value.name !== "string" ||
     typeof value.body_html !== "string" ||
     !isRecord(value.body_json) ||
@@ -69,8 +70,8 @@ export function TemplatesManager() {
   const [success, setSuccess] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 
   const handleUnauthorized = useCallback(() => {
     router.push("/login");
@@ -275,7 +276,10 @@ export function TemplatesManager() {
                   {templates.map((template) => (
                     <tr key={template.id}>
                       <td className="py-4 pr-4 font-medium text-zinc-100">
-                        {template.name}
+                        <p>{template.name}</p>
+                        <p className="mt-0.5 text-xs font-normal text-zinc-500">
+                          {formatEntityCode("TP", template.id)}
+                        </p>
                       </td>
                       <td className="py-4 pr-4 text-zinc-400">
                         {template.body_html.trim() ? "HTML provided" : "No HTML content"}

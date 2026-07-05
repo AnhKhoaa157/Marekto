@@ -5,6 +5,7 @@ import {
   statusForAccountAuthError,
 } from "@/lib/account-auth";
 import { signJWT } from "@/lib/auth";
+import { parseUuid } from "@/lib/identifiers";
 import { assertUserCanUseWorkspace } from "@/lib/workspace-collaboration";
 
 export const runtime = "nodejs";
@@ -16,16 +17,6 @@ const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 type SwitchWorkspaceBody = {
   workspaceId?: unknown;
 };
-
-function parseWorkspaceId(value: unknown): number {
-  const workspaceId = Number(value);
-
-  if (!Number.isInteger(workspaceId) || workspaceId <= 0) {
-    throw new Error("Workspace id is invalid");
-  }
-
-  return workspaceId;
-}
 
 function setAuthCookie(response: NextResponse, token: string): void {
   response.cookies.set({
@@ -40,7 +31,7 @@ function setAuthCookie(response: NextResponse, token: string): void {
 }
 
 function statusForError(message: string): number {
-  if (message === "Workspace id is invalid") {
+  if (message === "Invalid workspace id") {
     return 400;
   }
 
@@ -55,7 +46,7 @@ export async function POST(request: NextRequest) {
   try {
     const identity = await authenticateAccountRequest(request);
     const body = (await request.json()) as SwitchWorkspaceBody;
-    const workspaceId = parseWorkspaceId(body.workspaceId);
+    const workspaceId = parseUuid(body.workspaceId, "Workspace id");
     const workspace = await assertUserCanUseWorkspace(identity.userId, workspaceId);
     const token = await signJWT({ userId: identity.userId, workspaceId });
     const response = NextResponse.json({

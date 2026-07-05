@@ -3,6 +3,7 @@ import {
   categorizeEmailLogError,
   type EmailLogErrorCategory,
 } from "./email-logs.ts";
+import { parseUuid } from "./identifiers.ts";
 
 /**
  * Admin console read models (pure SQL, row types, safe field mappers, and query
@@ -58,14 +59,8 @@ export function parseAdminDiagnosticsLimit(value: string | null): number {
   return Math.min(parsed, MAX_DIAGNOSTICS_LIMIT);
 }
 
-export function parseWorkspaceIdParam(value: string): number {
-  const parsed = Number(value);
-
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error("Invalid workspace id");
-  }
-
-  return parsed;
+export function parseWorkspaceIdParam(value: string): string {
+  return parseUuid(value, "Workspace id");
 }
 
 export function toIsoString(value: Date | string | null | undefined): string | null {
@@ -112,9 +107,9 @@ export const SELECT_WORKSPACE_TEMPLATE_COUNT_SQL =
   'SELECT COUNT(*)::int AS count FROM "Templates" WHERE workspace_id = $1';
 
 export type AdminWorkspaceBaseRow = {
-  id: number;
+  id: string;
   name: string;
-  owner_id: number | null;
+  owner_id: string | null;
   owner_email: string | null;
   member_count: number;
   created_at: Date | string | null;
@@ -127,9 +122,9 @@ export type AdminWorkspaceMetrics = {
 };
 
 export type AdminWorkspaceSummary = {
-  id: number;
+  id: string;
   name: string;
-  owner_id: number | null;
+  owner_id: string | null;
   owner_email: string | null;
   member_count: number;
   contact_count: number;
@@ -164,9 +159,9 @@ export type AdminWorkspaceDetailMetrics = {
 };
 
 export type AdminWorkspaceDetail = {
-  id: number;
+  id: string;
   name: string;
-  owner_id: number | null;
+  owner_id: string | null;
   owner_email: string | null;
   member_count: number;
   created_at: string | null;
@@ -181,7 +176,7 @@ export type AdminWorkspaceDetail = {
 };
 
 export type AdminDeliveryFailureSummary = {
-  campaign_id: number | null;
+  campaign_id: string | null;
   campaign_name: string | null;
   failed_count: number;
   last_failed_at: string | null;
@@ -191,7 +186,7 @@ export function toAdminWorkspaceDetail(
   base: AdminWorkspaceBaseRow,
   metrics: AdminWorkspaceDetailMetrics,
   recentFailures: ReadonlyArray<{
-    campaign_id: number | null;
+    campaign_id: string | null;
     campaign_name: string | null;
     failed_count: number;
     last_failed_at: Date | string | null;
@@ -234,7 +229,7 @@ export const COUNT_ADMIN_USERS_SQL =
   "WHERE ($1 = '' OR u.email ILIKE '%' || $1 || '%')";
 
 export type AdminUserListRow = {
-  id: number;
+  id: string;
   email: string;
   role: string;
   created_at: Date | string | null;
@@ -242,7 +237,7 @@ export type AdminUserListRow = {
 };
 
 export type AdminUserSummary = {
-  id: number;
+  id: string;
   email: string;
   role: string;
   created_at: string | null;
@@ -271,8 +266,8 @@ export const SELECT_WORKSPACE_DELIVERY_FAILURES_SQL =
   "ORDER BY log.sent_at DESC NULLS LAST, log.id DESC LIMIT $2";
 
 export type AdminDeliveryFailureRow = {
-  id: number;
-  campaign_id: number | null;
+  id: string;
+  campaign_id: string | null;
   campaign_name: string | null;
   status: string;
   error_message: string | null;
@@ -281,9 +276,9 @@ export type AdminDeliveryFailureRow = {
 };
 
 export type AdminDeliveryDiagnostic = {
-  workspace_id: number;
+  workspace_id: string;
   workspace_name: string;
-  campaign_id: number | null;
+  campaign_id: string | null;
   campaign_name: string | null;
   category: EmailLogErrorCategory;
   message: string | null;
@@ -297,7 +292,7 @@ export type AdminDeliveryDiagnostic = {
  * `sanitizeEmailLogDiagnostic` / `categorizeEmailLogError`.
  */
 export function toAdminDeliveryDiagnostic(
-  workspaceId: number,
+  workspaceId: string,
   workspaceName: string,
   row: AdminDeliveryFailureRow,
 ): AdminDeliveryDiagnostic {

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { initializeDatabase, withWorkspace } from "@/lib/db";
+import { parseUuid } from "@/lib/identifiers";
 import {
   buildEmailLogSelection,
   parseEmailLogCursor,
@@ -24,15 +25,9 @@ type RouteParams = {
   params: Promise<{ id: string }>;
 };
 
-async function getCampaignId({ params }: RouteParams): Promise<number> {
+async function getCampaignId({ params }: RouteParams): Promise<string> {
   const { id } = await params;
-  const campaignId = Number(id);
-
-  if (!Number.isInteger(campaignId) || campaignId <= 0) {
-    throw new Error("Invalid campaign id");
-  }
-
-  return campaignId;
+  return parseUuid(id, "Campaign id");
 }
 
 function statusForError(message: string): number {

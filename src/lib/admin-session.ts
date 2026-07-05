@@ -47,7 +47,7 @@ async function readApiSession(
   };
 }
 
-async function lookupUser(userId: number): Promise<AdminUserRecord | null> {
+async function lookupUser(userId: string): Promise<AdminUserRecord | null> {
   // Ensure the schema exists before the lookup so admin surfaces work even on a
   // process whose first request is an admin page (idempotent after init).
   await initializeDatabase();
@@ -113,7 +113,7 @@ export async function getAdminSessionState(): Promise<AdminSessionState> {
  * Lightweight admin check used to decide whether to surface the admin entry
  * point in the tenant navigation. Reads only the role column.
  */
-export async function isAdminUserId(userId: number): Promise<boolean> {
+export async function isAdminUserId(userId: string): Promise<boolean> {
   const user = await lookupUser(userId);
   return (user?.role ?? "") === ADMIN_ROLE;
 }

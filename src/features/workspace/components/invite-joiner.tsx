@@ -9,7 +9,7 @@ type InviteJoinerProps = {
 };
 
 type JoinResponse =
-  | { success: true; data: { workspaceId: number } }
+  | { success: true; data: { workspaceId: string } }
   | { success: false; error: string };
 
 async function readJoinResponse(response: Response): Promise<JoinResponse> {

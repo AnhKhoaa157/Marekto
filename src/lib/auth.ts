@@ -1,9 +1,11 @@
 import { SignJWT, jwtVerify } from "jose";
 
+import { isUuid, type EntityId } from "./identifiers.ts";
+
 /**
  * Lightweight JWT utilities built on `jose` so they run in both the Node.js
  * runtime (route handlers) and the Edge runtime (Next.js proxy). Tokens
- * carry the integer tenant context used throughout the multi-tenant platform.
+ * carry the UUID tenant context used throughout the multi-tenant platform.
  */
 
 const JWT_ALGORITHM = "HS256";
@@ -12,8 +14,8 @@ const JWT_AUDIENCE = "marekto-app";
 const JWT_EXPIRATION = "7d";
 
 export type AuthTokenPayload = {
-  userId: number;
-  workspaceId: number | null;
+  userId: EntityId;
+  workspaceId: EntityId | null;
 };
 
 let cachedSecretKey: Uint8Array | null = null;
@@ -33,22 +35,18 @@ function getSecretKey(): Uint8Array {
   return cachedSecretKey;
 }
 
-function isValidId(value: unknown): value is number {
-  return typeof value === "number" && Number.isInteger(value) && value > 0;
-}
-
-function isValidWorkspaceId(value: unknown): value is number | null {
-  return value === null || isValidId(value);
+function isValidWorkspaceId(value: unknown): value is EntityId | null {
+  return value === null || isUuid(value);
 }
 
 /**
- * Sign a JWT embedding the integer tenant context. Throws if `JWT_SECRET` is
- * not configured or the payload IDs are not positive integers.
+ * Sign a JWT embedding the UUID tenant context. Throws if `JWT_SECRET` is not
+ * configured or either payload identifier is invalid.
  */
 export async function signJWT(payload: AuthTokenPayload): Promise<string> {
-  if (!isValidId(payload.userId) || !isValidWorkspaceId(payload.workspaceId)) {
+  if (!isUuid(payload.userId) || !isValidWorkspaceId(payload.workspaceId)) {
     throw new Error(
-      "Invalid JWT payload: userId must be positive and workspaceId must be positive or null",
+      "Invalid JWT payload: userId must be a UUID and workspaceId must be a UUID or null",
     );
   }
 
@@ -80,7 +78,7 @@ export async function verifyJWT(token: string): Promise<AuthTokenPayload | null>
 
     const { userId, workspaceId } = payload as Record<string, unknown>;
 
-    if (!isValidId(userId) || !isValidWorkspaceId(workspaceId)) {
+    if (!isUuid(userId) || !isValidWorkspaceId(workspaceId)) {
       return null;
     }
 

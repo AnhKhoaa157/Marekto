@@ -3,8 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { formatEntityCode } from "@/lib/identifiers";
+
 type WorkspaceSummary = {
-  id: number;
+  id: string;
   name: string;
   role: "owner" | "member";
 };
@@ -14,7 +16,7 @@ type WorkspacesResponse =
       success: true;
       data: {
         workspaces: WorkspaceSummary[];
-        currentWorkspaceId: number | null;
+        currentWorkspaceId: string | null;
       };
     }
   | { success: false; error: string };
@@ -31,7 +33,7 @@ function isWorkspacesResponse(value: unknown): value is WorkspacesResponse {
 export function WorkspaceSwitcher() {
   const router = useRouter();
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
-  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<number | null>(null);
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSwitching, setIsSwitching] = useState(false);
 
@@ -63,7 +65,7 @@ export function WorkspaceSwitcher() {
     };
   }, []);
 
-  async function switchWorkspace(workspaceId: number) {
+  async function switchWorkspace(workspaceId: string) {
     if (workspaceId === currentWorkspaceId) {
       return;
     }
@@ -111,12 +113,12 @@ export function WorkspaceSwitcher() {
         <select
           className="mt-1 h-9 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 text-sm normal-case tracking-normal text-zinc-100 outline-none focus:border-indigo-500"
           disabled={isSwitching}
-          onChange={(event) => void switchWorkspace(Number(event.target.value))}
+          onChange={(event) => void switchWorkspace(event.target.value)}
           value={currentWorkspaceId ?? ""}
         >
           {workspaces.map((workspace) => (
             <option key={workspace.id} value={workspace.id}>
-              {workspace.name} ({workspace.role})
+              {workspace.name} - {formatEntityCode("WS", workspace.id)} ({workspace.role})
             </option>
           ))}
         </select>

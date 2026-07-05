@@ -6,6 +6,7 @@ import {
   hashAiInput,
   saveAiOutput,
 } from "../src/lib/ai/cache.ts";
+import { EMAIL_LOG_ID, USER_ID, WORKSPACE_ID } from "./test-ids.mjs";
 
 function createDate() {
   return new Date("2026-06-30T00:00:00.000Z");
@@ -32,7 +33,7 @@ test("reads cached AI output inside the requested workspace", async () => {
         return {
           rows: [
             {
-              id: 12,
+              id: EMAIL_LOG_ID,
               workspace_id: workspaceId,
               feature: "segmentation",
               input_hash: expectedHash,
@@ -41,7 +42,7 @@ test("reads cached AI output inside the requested workspace", async () => {
               provider: "gemini",
               model: "gemini-2.5-flash",
               status: "generated",
-              created_by: 4,
+              created_by: USER_ID,
               created_at: createDate(),
               updated_at: createDate(),
             },
@@ -51,15 +52,15 @@ test("reads cached AI output inside the requested workspace", async () => {
     });
   };
 
-  const cached = await getCachedAiOutput(7, "segmentation", " VIP customers in HCM ", {
+  const cached = await getCachedAiOutput(WORKSPACE_ID, "segmentation", " VIP customers in HCM ", {
     workspaceRunner,
   });
 
-  assert.equal(calls[0].workspaceId, 7);
+  assert.equal(calls[0].workspaceId, WORKSPACE_ID);
   assert.match(calls[1].text, /FROM "Ai_outputs"/);
-  assert.deepEqual(calls[1].params, [7, "segmentation", expectedHash]);
+  assert.deepEqual(calls[1].params, [WORKSPACE_ID, "segmentation", expectedHash]);
   assert.deepEqual(cached?.outputJson, { city: "HCM", tags_contains: "VIP" });
-  assert.equal(cached?.workspaceId, 7);
+  assert.equal(cached?.workspaceId, WORKSPACE_ID);
 });
 
 test("returns null when no cached AI output exists", async () => {
@@ -68,7 +69,7 @@ test("returns null when no cached AI output exists", async () => {
       query: async () => ({ rows: [] }),
     });
 
-  const cached = await getCachedAiOutput(7, "segmentation", "No cache", {
+  const cached = await getCachedAiOutput(WORKSPACE_ID, "segmentation", "No cache", {
     workspaceRunner,
   });
 
@@ -88,7 +89,7 @@ test("upserts cached AI output with parameterized JSONB payloads", async () => {
         return {
           rows: [
             {
-              id: 21,
+              id: EMAIL_LOG_ID,
               workspace_id: workspaceId,
               feature: params[1],
               input_hash: params[2],
@@ -109,21 +110,21 @@ test("upserts cached AI output with parameterized JSONB payloads", async () => {
 
   const cached = await saveAiOutput(
     {
-      workspaceId: 7,
+      workspaceId: WORKSPACE_ID,
       feature: "segmentation",
       inputText: " VIP customers in HCM ",
       outputJson: { city: "HCM" },
       provider: "gemini",
       model: "gemini-2.5-flash",
-      createdBy: 4,
+      createdBy: USER_ID,
     },
     { workspaceRunner },
   );
 
-  assert.equal(calls[0].workspaceId, 7);
+  assert.equal(calls[0].workspaceId, WORKSPACE_ID);
   assert.match(calls[1].text, /ON CONFLICT/);
   assert.deepEqual(calls[1].params, [
-    7,
+    WORKSPACE_ID,
     "segmentation",
     expectedHash,
     "VIP customers in HCM",
@@ -131,7 +132,7 @@ test("upserts cached AI output with parameterized JSONB payloads", async () => {
     "gemini",
     "gemini-2.5-flash",
     "generated",
-    4,
+    USER_ID,
   ]);
   assert.deepEqual(cached.outputJson, { city: "HCM" });
 });
@@ -142,17 +143,17 @@ test("rejects invalid cache input before querying", async () => {
   };
 
   await assert.rejects(
-    getCachedAiOutput(0, "segmentation", "VIP", { workspaceRunner }),
-    /workspaceId must be a positive integer/,
+    getCachedAiOutput("bad", "segmentation", "VIP", { workspaceRunner }),
+    /workspaceId must be a UUID/,
   );
   await assert.rejects(
-    getCachedAiOutput(7, "unsupported", "VIP", { workspaceRunner }),
+    getCachedAiOutput(WORKSPACE_ID, "unsupported", "VIP", { workspaceRunner }),
     /Unsupported AI output feature/,
   );
   await assert.rejects(
     saveAiOutput(
       {
-        workspaceId: 7,
+        workspaceId: WORKSPACE_ID,
         feature: "segmentation",
         inputText: "VIP",
         outputJson: undefined,

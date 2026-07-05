@@ -4,6 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 
+import {
+  isAuthenticatedData,
+  type AuthenticatedData,
+} from "@/lib/auth-response";
+
 type AuthMode = "login" | "register" | "admin-login";
 
 type AuthFormProps = {
@@ -23,13 +28,6 @@ type AuthErrorResponse = {
 
 type AuthResponse = AuthSuccessResponse | AuthErrorResponse;
 
-type AuthenticatedData = {
-  token: string;
-  userId: number;
-  workspaceId: number | null;
-  nextPath?: string;
-};
-
 type RegistrationVerificationData = {
   verificationRequired: true;
   email: string;
@@ -38,16 +36,6 @@ type RegistrationVerificationData = {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
-}
-
-function isAuthenticatedData(value: unknown): value is AuthenticatedData {
-  return (
-    isRecord(value) &&
-    typeof value.token === "string" &&
-    typeof value.userId === "number" &&
-    (typeof value.workspaceId === "number" || value.workspaceId === null) &&
-    (value.nextPath === undefined || typeof value.nextPath === "string")
-  );
 }
 
 function isRegistrationVerificationData(

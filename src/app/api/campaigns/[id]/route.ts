@@ -18,6 +18,7 @@ import {
   type UserCampaignStatus,
 } from "@/lib/campaign-status";
 import { initializeDatabase, withWorkspace } from "@/lib/db";
+import { parseUuid } from "@/lib/identifiers";
 import { getWorkspaceIdFromHeaders } from "@/lib/workspace";
 
 export const runtime = "nodejs";
@@ -25,7 +26,7 @@ export const dynamic = "force-dynamic";
 
 const UPDATE_CAMPAIGN_SQL =
   'UPDATE "Campaigns" SET name = $1, status = $2, target_filters = $3::jsonb, ' +
-  "scheduled_at = $4::timestamptz, run_at = $4::timestamptz, template_id = $5::int, " +
+  "scheduled_at = $4::timestamptz, run_at = $4::timestamptz, template_id = $5::uuid, " +
   "ai_personalization_enabled = $6, ai_context = $7::jsonb, updated_at = CURRENT_TIMESTAMP " +
   "WHERE id = $8 AND workspace_id = $9 " +
   "RETURNING id, workspace_id, template_id, name, status, target_filters, ai_personalization_enabled, ai_context, scheduled_at, run_at, created_at, updated_at";
@@ -39,9 +40,9 @@ type RouteParams = {
 };
 
 type CampaignRow = {
-  id: number;
-  workspace_id: number;
-  template_id: number | null;
+  id: string;
+  workspace_id: string;
+  template_id: string | null;
   name: string;
   status: CampaignStatus;
   target_filters: CampaignTargetFilters;
@@ -63,15 +64,9 @@ type UpdateCampaignBody = {
   scheduled_at?: unknown;
 };
 
-async function getCampaignId({ params }: RouteParams): Promise<number> {
+async function getCampaignId({ params }: RouteParams): Promise<string> {
   const { id } = await params;
-  const campaignId = Number(id);
-
-  if (!Number.isInteger(campaignId) || campaignId <= 0) {
-    throw new Error("Invalid campaign id");
-  }
-
-  return campaignId;
+  return parseUuid(id, "Campaign id");
 }
 
 function parseName(value: unknown): string | null {
@@ -124,7 +119,7 @@ function parseScheduledAt(value: unknown): { provided: boolean; value: string | 
   return { provided: true, value: date.toISOString() };
 }
 
-function parseTemplateId(value: unknown): { provided: boolean; value: number | null } {
+function parseTemplateId(value: unknown): { provided: boolean; value: string | null } {
   if (value === undefined) {
     return { provided: false, value: null };
   }
@@ -133,13 +128,7 @@ function parseTemplateId(value: unknown): { provided: boolean; value: number | n
     return { provided: true, value: null };
   }
 
-  const templateId = Number(value);
-
-  if (!Number.isInteger(templateId) || templateId <= 0) {
-    throw new Error("Invalid template id");
-  }
-
-  return { provided: true, value: templateId };
+  return { provided: true, value: parseUuid(value, "Template id") };
 }
 
 function toIsoString(value: Date | null): string | null {

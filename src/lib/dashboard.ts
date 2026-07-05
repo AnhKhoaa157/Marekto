@@ -14,7 +14,7 @@ type CountRow = {
 };
 
 export type CampaignRow = {
-  id: number;
+  id: string;
   name: string;
   status: string;
   scheduled_at: Date | string | null;
@@ -39,7 +39,7 @@ export type ReadyDashboardData = {
 };
 
 export async function loadDashboardData(
-  workspaceId: number,
+  workspaceId: string,
   searchQuery: string,
 ): Promise<ReadyDashboardData> {
   await initializeDatabase();

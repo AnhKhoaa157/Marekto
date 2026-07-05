@@ -4,7 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 
-const WORKSPACE_ID = 7;
+import { WORKSPACE_ID } from "./test-ids.mjs";
 const SRC_ROOT = path.resolve(import.meta.dirname, "..", "src");
 const GEMINI_URL = pathToFileURL(
   path.join(SRC_ROOT, "lib", "ai", "gemini.ts"),

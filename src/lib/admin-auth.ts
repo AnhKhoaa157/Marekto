@@ -13,8 +13,8 @@ export const ADMIN_ROLE = "admin";
 
 /** Minimal verified session shape derived from the JWT. */
 export type AdminSessionContext = {
-  userId: number;
-  workspaceId: number;
+  userId: string;
+  workspaceId: string;
 };
 
 /**
@@ -23,17 +23,17 @@ export type AdminSessionContext = {
  * returned by any admin code path.
  */
 export type AdminUserRecord = {
-  id: number;
+  id: string;
   email: string;
   role: string;
 };
 
 /** Sanitized admin identity returned to callers. Carries no secrets. */
 export type AdminIdentity = {
-  userId: number;
+  userId: string;
   email: string;
   role: string;
-  workspaceId: number;
+  workspaceId: string;
 };
 
 export type AdminAuthorization =

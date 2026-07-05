@@ -1,6 +1,7 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
 
 import { initializeDatabase, withWorkspace } from "@/lib/db";
+import { parseUuid } from "@/lib/identifiers";
 import { getWorkspaceIdFromHeaders } from "@/lib/workspace";
 
 export const runtime = "nodejs";
@@ -18,8 +19,8 @@ type RouteParams = {
 };
 
 type ContactRow = {
-  id: number;
-  workspace_id: number;
+  id: string;
+  workspace_id: string;
   email: string;
   first_name: string | null;
   last_name: string | null;
@@ -30,8 +31,8 @@ type ContactRow = {
 };
 
 type ListContactRelationRow = {
-  contact_id: number;
-  list_id: number;
+  contact_id: string;
+  list_id: string;
   added_at: Date;
 };
 
@@ -39,28 +40,16 @@ type ContactRelationBody = {
   contact_id?: unknown;
 };
 
-async function getListId({ params }: RouteParams): Promise<number> {
+async function getListId({ params }: RouteParams): Promise<string> {
   const { id } = await params;
-  const listId = Number(id);
-
-  if (!Number.isInteger(listId) || listId <= 0) {
-    throw new Error("Invalid list id");
-  }
-
-  return listId;
+  return parseUuid(id, "List id");
 }
 
-function parseContactId(value: unknown): number {
-  const contactId = Number(value);
-
-  if (!Number.isInteger(contactId) || contactId <= 0) {
-    throw new Error("Invalid contact id");
-  }
-
-  return contactId;
+function parseContactId(value: unknown): string {
+  return parseUuid(value, "Contact id");
 }
 
-async function getContactIdFromRequest(request: NextRequest): Promise<number> {
+async function getContactIdFromRequest(request: NextRequest): Promise<string> {
   const queryContactId = request.nextUrl.searchParams.get("contact_id");
 
   if (queryContactId) {

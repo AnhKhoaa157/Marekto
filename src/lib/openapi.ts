@@ -60,8 +60,8 @@ export const openApiSpec = {
         type: "object",
         properties: {
           token: { type: "string", description: "Signed JWT" },
-          userId: { type: "integer", example: 1 },
-          workspaceId: { type: "integer", nullable: true, example: 1 },
+          userId: { type: "string", format: "uuid" },
+          workspaceId: { type: "string", format: "uuid", nullable: true },
           nextPath: { type: "string", example: "/dashboard" },
         },
         required: ["token", "userId", "workspaceId", "nextPath"],

@@ -13,6 +13,7 @@ import {
   AdminStatCard,
 } from "@/components/admin/admin-ui";
 import { parseWorkspaceIdParam } from "@/lib/admin-console";
+import { formatEntityCode } from "@/lib/identifiers";
 import {
   loadAdminWorkspaceDetail,
   recordAdminAudit,
@@ -43,7 +44,7 @@ export default async function AdminWorkspaceDetailPage({ params }: PageProps) {
 
   const { id } = await params;
 
-  let workspaceId: number;
+  let workspaceId: string;
   try {
     workspaceId = parseWorkspaceIdParam(id);
   } catch {
@@ -98,6 +99,9 @@ export default async function AdminWorkspaceDetailPage({ params }: PageProps) {
         ) : detail ? (
           <>
             <article className="rounded-md border border-zinc-800 bg-zinc-900 p-4 shadow-sm">
+              <p className="mb-4 text-xs font-medium text-zinc-500">
+                {formatEntityCode("WS", detail.id)}
+              </p>
               <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div>
                   <dt className="text-xs uppercase tracking-wide text-zinc-500">

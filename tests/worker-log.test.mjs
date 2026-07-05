@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { CAMPAIGN_ID, CONTACT_ID, WORKSPACE_ID } from "./test-ids.mjs";
+
 import { parseCampaignTargetFilters } from "../src/lib/campaign-filters.ts";
 import {
   categorizeWorkerFailure,
@@ -82,9 +84,9 @@ test("writes one structured JSON event without raw error stacks", () => {
     "error",
     "campaign_processing_failed",
     {
-      workspaceId: 7,
-      campaignId: 12,
-      contactId: 18,
+      workspaceId: WORKSPACE_ID,
+      campaignId: CAMPAIGN_ID,
+      contactId: CONTACT_ID,
       category: "smtp_send_failed",
       reason: error,
     },
@@ -98,9 +100,9 @@ test("writes one structured JSON event without raw error stacks", () => {
     service: "campaign-worker",
     level: "error",
     event: "campaign_processing_failed",
-    workspace_id: 7,
-    campaign_id: 12,
-    contact_id: 18,
+    workspace_id: WORKSPACE_ID,
+    campaign_id: CAMPAIGN_ID,
+    contact_id: CONTACT_ID,
     category: "smtp_send_failed",
     reason: "Connection failed token=[REDACTED]",
   });

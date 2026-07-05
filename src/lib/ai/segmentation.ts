@@ -2,6 +2,7 @@ import {
   parseCampaignTargetFilters,
   type CampaignTargetFilters,
 } from "../campaign-filters.ts";
+import { isUuid } from "../identifiers.ts";
 
 import {
   getCachedAiOutput,
@@ -60,13 +61,13 @@ type GeminiJsonGenerator = (request: GeminiJsonRequest) => Promise<unknown>;
 type SegmentationSource = "gemini" | "cache";
 
 type SegmentationCacheReader = (
-  workspaceId: number,
+  workspaceId: string,
   feature: typeof SEGMENTATION_CACHE_FEATURE,
   inputText: string,
 ) => Promise<CachedAiOutput | null>;
 
 type SegmentationCacheWriter = (input: {
-  workspaceId: number;
+  workspaceId: string;
   feature: typeof SEGMENTATION_CACHE_FEATURE;
   inputText: string;
   outputJson: CampaignTargetFilters;
@@ -259,11 +260,11 @@ export async function generateAudienceFilters(
 }
 
 export async function generateAudienceFiltersWithCache(
-  workspaceId: number,
+  workspaceId: string,
   promptValue: unknown,
   dependencies: GenerateAudienceWithCacheDependencies = {},
 ): Promise<AudienceGenerationResult> {
-  if (!Number.isInteger(workspaceId) || workspaceId <= 0) {
+  if (!isUuid(workspaceId)) {
     throw new SegmentationInputError("Invalid workspace id");
   }
 

@@ -4,6 +4,7 @@ import {
   authenticateAccountRequest,
   statusForAccountAuthError,
 } from "@/lib/account-auth";
+import { parseUuid } from "@/lib/identifiers";
 import {
   parseWorkspaceRole,
   removeWorkspaceMember,
@@ -21,17 +22,7 @@ type UpdateMemberBody = {
   role?: unknown;
 };
 
-function parseUserId(value: string): number {
-  const userId = Number(value);
-
-  if (!Number.isInteger(userId) || userId <= 0) {
-    throw new Error("User id is invalid");
-  }
-
-  return userId;
-}
-
-function getCurrentWorkspaceId(workspaceId: number | null): number {
+function getCurrentWorkspaceId(workspaceId: string | null): string {
   if (!workspaceId) {
     throw new Error("Workspace context is required");
   }
@@ -42,7 +33,7 @@ function getCurrentWorkspaceId(workspaceId: number | null): number {
 function statusForError(message: string): number {
   if (
     [
-      "User id is invalid",
+      "Invalid user id",
       "Workspace context is required",
       "Workspace role is invalid",
     ].includes(message)
@@ -69,7 +60,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const identity = await authenticateAccountRequest(request);
     const { userId: userIdParam } = await params;
-    const targetUserId = parseUserId(userIdParam);
+    const targetUserId = parseUuid(userIdParam, "User id");
     const workspaceId = getCurrentWorkspaceId(identity.workspaceId);
     const body = (await request.json()) as UpdateMemberBody;
     const role = parseWorkspaceRole(body.role);
@@ -94,7 +85,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   try {
     const identity = await authenticateAccountRequest(_request);
     const { userId: userIdParam } = await params;
-    const targetUserId = parseUserId(userIdParam);
+    const targetUserId = parseUuid(userIdParam, "User id");
     const workspaceId = getCurrentWorkspaceId(identity.workspaceId);
 
     await removeWorkspaceMember({

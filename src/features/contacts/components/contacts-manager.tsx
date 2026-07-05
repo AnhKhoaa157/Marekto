@@ -14,10 +14,11 @@ import {
   isRecord,
   requestApi,
 } from "@/lib/client-api";
+import { formatEntityCode } from "@/lib/identifiers";
 
 type ContactRow = {
-  id: number;
-  workspace_id: number;
+  id: string;
+  workspace_id: string;
   email: string;
   first_name: string | null;
   last_name: string | null;
@@ -41,8 +42,8 @@ function parseNullableString(value: unknown): string | null {
 function parseContact(value: unknown): ContactRow {
   if (
     !isRecord(value) ||
-    typeof value.id !== "number" ||
-    typeof value.workspace_id !== "number" ||
+    typeof value.id !== "string" ||
+    typeof value.workspace_id !== "string" ||
     typeof value.email !== "string" ||
     typeof value.created_at !== "string" ||
     !isRecord(value.properties)
@@ -332,6 +333,9 @@ export function ContactsManager() {
                       <tr key={contact.id}>
                         <td className="py-4 pr-4 font-medium text-zinc-100">
                           <p>{getContactName(contact)}</p>
+                          <p className="mt-0.5 text-xs font-normal text-zinc-500">
+                            {formatEntityCode("CT", contact.id)}
+                          </p>
                           {city || tags.length > 0 || genericProperties.length > 0 ? (
                             <div className="mt-2 flex max-w-sm flex-wrap gap-1.5">
                               {city ? (

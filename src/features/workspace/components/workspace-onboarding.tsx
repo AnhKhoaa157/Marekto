@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
 type ApiResponse =
-  | { success: true; data: { workspaceId: number } }
+  | { success: true; data: { workspaceId: string } }
   | { success: false; error: string };
 
 async function readApiResponse(response: Response): Promise<ApiResponse> {

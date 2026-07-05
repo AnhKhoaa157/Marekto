@@ -20,6 +20,7 @@ import {
   buildCampaignDraftRequest,
   buildTemplateDraftRequest,
 } from "../src/lib/campaign-builder-draft.ts";
+import { TEMPLATE_ID } from "./test-ids.mjs";
 
 const VALID_INPUT = {
   productOrService: "Online English course for beginners",
@@ -419,7 +420,7 @@ test("buildTemplateDraftRequest requires a name and HTML", () => {
 test("buildCampaignDraftRequest always produces a draft with no schedule", () => {
   const request = buildCampaignDraftRequest({
     name: "July push",
-    templateId: 12,
+    templateId: TEMPLATE_ID,
     useAllContacts: false,
     filtersValid: true,
     targetFilters: { city: "HCM", lead_score_gt: 70 },
@@ -429,7 +430,7 @@ test("buildCampaignDraftRequest always produces a draft with no schedule", () =>
 
   assert.equal(request.status, "draft");
   assert.equal(request.scheduled_at, null);
-  assert.equal(request.template_id, 12);
+  assert.equal(request.template_id, TEMPLATE_ID);
   assert.equal(request.ai_personalization_enabled, true);
   assert.deepEqual(request.target_filters, { city: "HCM", lead_score_gt: 70 });
   assert.deepEqual(request.ai_context, { goal: "Increase signups", tone: "Friendly" });

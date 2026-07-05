@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 
 import type { PoolClient, QueryResultRow } from "pg";
 
+import { isUuid } from "../identifiers.ts";
+
 const AI_OUTPUT_FEATURES = [
   "segmentation",
   "lead_scoring",
@@ -31,8 +33,8 @@ export type AiOutputFeature = (typeof AI_OUTPUT_FEATURES)[number];
 export type AiOutputStatus = (typeof AI_OUTPUT_STATUSES)[number];
 
 type AiOutputRow = QueryResultRow & {
-  id: number;
-  workspace_id: number;
+  id: string;
+  workspace_id: string;
   feature: AiOutputFeature;
   input_hash: string;
   input_text: string;
@@ -40,14 +42,14 @@ type AiOutputRow = QueryResultRow & {
   provider: string;
   model: string;
   status: AiOutputStatus;
-  created_by: number | null;
+  created_by: string | null;
   created_at: Date;
   updated_at: Date;
 };
 
 export type CachedAiOutput = {
-  id: number;
-  workspaceId: number;
+  id: string;
+  workspaceId: string;
   feature: AiOutputFeature;
   inputHash: string;
   inputText: string;
@@ -55,25 +57,25 @@ export type CachedAiOutput = {
   provider: string;
   model: string;
   status: AiOutputStatus;
-  createdBy: number | null;
+  createdBy: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
 
 export type SaveAiOutputInput = {
-  workspaceId: number;
+  workspaceId: string;
   feature: AiOutputFeature;
   inputText: string;
   outputJson: unknown;
   provider: string;
   model: string;
   status?: AiOutputStatus;
-  createdBy?: number | null;
+  createdBy?: string | null;
 };
 
 type QueryClient = Pick<PoolClient, "query">;
 type WorkspaceRunner = <T>(
-  workspaceId: number,
+  workspaceId: string,
   callback: (client: QueryClient) => Promise<T>,
 ) => Promise<T>;
 
@@ -82,7 +84,7 @@ type AiCacheDependencies = {
 };
 
 async function runWithDefaultWorkspace<T>(
-  workspaceId: number,
+  workspaceId: string,
   callback: (client: QueryClient) => Promise<T>,
 ): Promise<T> {
   const { withWorkspace } = await import("../db.ts");
@@ -98,9 +100,9 @@ function isAiOutputStatus(value: string): value is AiOutputStatus {
   return AI_OUTPUT_STATUSES.includes(value as AiOutputStatus);
 }
 
-function assertPositiveInteger(name: string, value: number): void {
-  if (!Number.isInteger(value) || value <= 0) {
-    throw new Error(`${name} must be a positive integer`);
+function assertEntityId(name: string, value: string): void {
+  if (!isUuid(value)) {
+    throw new Error(`${name} must be a UUID`);
   }
 }
 
@@ -156,12 +158,12 @@ export function hashAiInput(inputText: string): string {
 }
 
 export async function getCachedAiOutput(
-  workspaceId: number,
+  workspaceId: string,
   feature: AiOutputFeature,
   inputText: string,
   dependencies: AiCacheDependencies = {},
 ): Promise<CachedAiOutput | null> {
-  assertPositiveInteger("workspaceId", workspaceId);
+  assertEntityId("workspaceId", workspaceId);
 
   if (!isAiOutputFeature(feature)) {
     throw new Error(`Unsupported AI output feature: ${feature}`);
@@ -186,7 +188,7 @@ export async function saveAiOutput(
   input: SaveAiOutputInput,
   dependencies: AiCacheDependencies = {},
 ): Promise<CachedAiOutput> {
-  assertPositiveInteger("workspaceId", input.workspaceId);
+  assertEntityId("workspaceId", input.workspaceId);
 
   if (!isAiOutputFeature(input.feature)) {
     throw new Error(`Unsupported AI output feature: ${input.feature}`);
@@ -203,7 +205,7 @@ export async function saveAiOutput(
   }
 
   if (createdBy !== null) {
-    assertPositiveInteger("createdBy", createdBy);
+    assertEntityId("createdBy", createdBy);
   }
 
   const inputHash = hashAiInput(normalizedInput);

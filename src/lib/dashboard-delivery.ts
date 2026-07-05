@@ -20,7 +20,7 @@ export type EmailDeliveryMetricsRow = {
 };
 
 export type RecentDeliveryFailureRow = {
-  campaign_id: number;
+  campaign_id: string;
   campaign_name: string;
   failed_count: number;
   last_failed_at: Date | string | null;

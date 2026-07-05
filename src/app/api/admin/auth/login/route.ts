@@ -20,9 +20,9 @@ const SELECT_ADMIN_WORKSPACE_SQL =
   "LIMIT 1";
 
 type AdminWorkspaceRow = {
-  user_id: number;
+  user_id: string;
   password_hash: string;
-  workspace_id: number | null;
+  workspace_id: string | null;
 };
 
 type LoginBody = {

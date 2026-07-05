@@ -5,7 +5,7 @@ import { authenticateTenantRequest } from "@/lib/proxy-auth";
 
 /**
  * Intercepts tenant-scoped API routes, authenticates the caller via JWT, and
- * injects the verified integer workspace context as the `x-workspace-id`
+ * injects the verified UUID workspace context as the `x-workspace-id`
  * header so downstream route handlers resolve the correct tenant. The
  * `/api/auth/*` routes are intentionally excluded to avoid an auth loop.
  *

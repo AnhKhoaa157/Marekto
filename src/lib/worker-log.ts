@@ -12,9 +12,9 @@ export type WorkerLogCategory =
   | "worker_failed";
 
 export type WorkerLogContext = {
-  workspaceId?: number;
-  campaignId?: number;
-  contactId?: number;
+  workspaceId?: string;
+  campaignId?: string;
+  contactId?: string;
   category?: WorkerLogCategory;
   reason?: unknown;
 };

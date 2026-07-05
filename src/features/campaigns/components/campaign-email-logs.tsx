@@ -11,6 +11,7 @@ import {
   isRecord,
   requestApi,
 } from "@/lib/client-api";
+import { formatEntityCode } from "@/lib/identifiers";
 import { parseCampaignAiContext } from "@/lib/campaign-ai-context";
 import {
   getEmailLogErrorCategoryLabel,
@@ -28,7 +29,7 @@ import type {
 } from "@/lib/email-logs";
 
 type CampaignEmailLogsProps = {
-  campaignId: number;
+  campaignId: string;
 };
 
 function parseNullableString(value: unknown, label: string): string | null {
@@ -86,7 +87,7 @@ function parseErrorCategory(value: unknown): EmailLogErrorCategory {
 function parseCampaign(value: unknown): CampaignDeliveryCampaign {
   if (
     !isRecord(value) ||
-    typeof value.id !== "number" ||
+    typeof value.id !== "string" ||
     typeof value.name !== "string" ||
     typeof value.status !== "string" ||
     typeof value.ai_personalization_enabled !== "boolean"
@@ -129,8 +130,8 @@ function parseSummary(value: unknown): CampaignDeliverySummary {
 function parseLog(value: unknown): CampaignEmailLogItem {
   if (
     !isRecord(value) ||
-    typeof value.id !== "number" ||
-    (value.contact_id !== null && typeof value.contact_id !== "number")
+    typeof value.id !== "string" ||
+    (value.contact_id !== null && typeof value.contact_id !== "string")
   ) {
     throw new Error("The email log response has an invalid shape.");
   }
@@ -242,7 +243,7 @@ export function CampaignEmailLogs({ campaignId }: Readonly<CampaignEmailLogsProp
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [expandedLogId, setExpandedLogId] = useState<number | null>(null);
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
   const loadCampaign = useCallback(
     async (signal?: AbortSignal, refresh = false) => {
@@ -345,6 +346,9 @@ export function CampaignEmailLogs({ campaignId }: Readonly<CampaignEmailLogsProp
               <h2 className="break-words text-2xl font-semibold tracking-tight text-zinc-50">
                 {data.campaign.name}
               </h2>
+              <span className="text-xs font-medium text-zinc-500">
+                {formatEntityCode("CP", data.campaign.id)}
+              </span>
               <span
                 className={`inline-flex rounded-md border px-2 py-1 text-xs font-medium ${statusClassName(data.campaign.status)}`}
               >
@@ -492,6 +496,9 @@ export function CampaignEmailLogs({ campaignId }: Readonly<CampaignEmailLogsProp
                       <tr className={log.status === "failed" ? "bg-red-500/5" : undefined}>
                         <td className="min-w-48 px-4 py-4 align-top">
                           <p className="font-medium text-zinc-100">{recipient}</p>
+                          <p className="mt-0.5 text-xs text-zinc-600">
+                            {formatEntityCode("EL", log.id)}
+                          </p>
                           {log.recipient_email && log.recipient_email !== recipient ? (
                             <p className="mt-1 text-sm text-zinc-500">
                               {log.recipient_email}

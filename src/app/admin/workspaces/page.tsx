@@ -26,6 +26,7 @@ import {
 } from "@/lib/admin-data";
 import { getAdminSessionState } from "@/lib/admin-session";
 import type { AdminWorkspaceSummary } from "@/lib/admin-console";
+import { formatEntityCode } from "@/lib/identifiers";
 import { sanitizeWorkerLogReason } from "@/lib/worker-log";
 
 export const dynamic = "force-dynamic";
@@ -145,7 +146,9 @@ export default async function AdminWorkspacesPage({ searchParams }: PageProps) {
                         >
                           {workspace.name}
                         </Link>
-                        <p className="text-xs text-zinc-500">ID {workspace.id}</p>
+                        <p className="text-xs text-zinc-500">
+                          {formatEntityCode("WS", workspace.id)}
+                        </p>
                       </td>
                       <td className="py-4 pr-4 text-zinc-400">
                         {workspace.owner_email ?? "—"}

@@ -2,8 +2,8 @@ const AUTH_COOKIE_NAME = "auth_token";
 const BEARER_PREFIX = "Bearer ";
 
 type TenantIdentity = {
-  userId: number;
-  workspaceId: number | null;
+  userId: string;
+  workspaceId: string | null;
 };
 
 type VerifyToken = (token: string) => Promise<TenantIdentity | null>;
@@ -60,7 +60,7 @@ export async function authenticateTenantRequest(
   }
 
   const forwardedHeaders = new Headers(headers);
-  forwardedHeaders.set("x-workspace-id", identity.workspaceId.toString());
+  forwardedHeaders.set("x-workspace-id", identity.workspaceId);
 
   return { ok: true, headers: forwardedHeaders, identity };
 }

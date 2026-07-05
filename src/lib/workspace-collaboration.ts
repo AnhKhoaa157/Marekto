@@ -4,6 +4,7 @@ import type { PoolClient } from "pg";
 
 import { sanitizeAuditMetadata } from "./admin-audit.ts";
 import { initializeDatabase, query, withTransaction } from "./db.ts";
+import { isUuid } from "./identifiers.ts";
 
 const WORKSPACE_OWNER_ROLE = "owner";
 const WORKSPACE_MEMBER_ROLE = "member";
@@ -13,26 +14,26 @@ const MAX_WORKSPACE_NAME_LENGTH = 80;
 export type WorkspaceRole = "owner" | "member";
 
 export type WorkspaceSummary = {
-  id: number;
+  id: string;
   name: string;
   role: WorkspaceRole;
-  owner_id: number | null;
+  owner_id: string | null;
   member_count: number;
   joined_at: string | null;
 };
 
 export type WorkspaceMember = {
-  user_id: number;
+  user_id: string;
   email: string;
   role: WorkspaceRole;
   joined_at: string | null;
 };
 
 export type WorkspaceInvite = {
-  id: number;
-  workspace_id: number;
+  id: string;
+  workspace_id: string;
   workspace_name: string;
-  created_by_user_id: number;
+  created_by_user_id: string;
   created_by_email: string | null;
   expires_at: string;
   revoked_at: string | null;
@@ -40,44 +41,44 @@ export type WorkspaceInvite = {
 };
 
 export type InvitePreview = {
-  workspace_id: number;
+  workspace_id: string;
   workspace_name: string;
   member_count: number;
   expires_at: string;
 };
 
 export type WorkspaceAuditEvent = {
-  id: number;
-  actor_user_id: number | null;
+  id: string;
+  actor_user_id: string | null;
   actor_email: string | null;
   target_type: string;
-  target_id: number | null;
+  target_id: string | null;
   action: string;
   metadata: Record<string, unknown>;
   created_at: string;
 };
 
 type WorkspaceSummaryRow = {
-  id: number;
+  id: string;
   name: string;
   role: string;
-  owner_id: number | null;
+  owner_id: string | null;
   member_count: number;
   joined_at: Date | string | null;
 };
 
 type WorkspaceMemberRow = {
-  user_id: number;
+  user_id: string;
   email: string;
   role: string;
   joined_at: Date | string | null;
 };
 
 type InviteRow = {
-  id: number;
-  workspace_id: number;
+  id: string;
+  workspace_id: string;
   workspace_name: string;
-  created_by_user_id: number;
+  created_by_user_id: string;
   created_by_email: string | null;
   expires_at: Date | string;
   revoked_at: Date | string | null;
@@ -85,25 +86,25 @@ type InviteRow = {
 };
 
 type InvitePreviewRow = {
-  workspace_id: number;
+  workspace_id: string;
   workspace_name: string;
   member_count: number;
   expires_at: Date | string;
 };
 
 type WorkspaceAuditRow = {
-  id: number;
-  actor_user_id: number | null;
+  id: string;
+  actor_user_id: string | null;
   actor_email: string | null;
   target_type: string;
-  target_id: number | null;
+  target_id: string | null;
   action: string;
   metadata: unknown;
   created_at: Date | string;
 };
 
 type IdRow = {
-  id: number;
+  id: string;
 };
 
 type RoleRow = {
@@ -127,9 +128,9 @@ function toWorkspaceRole(value: string): WorkspaceRole {
   return value === WORKSPACE_OWNER_ROLE ? WORKSPACE_OWNER_ROLE : WORKSPACE_MEMBER_ROLE;
 }
 
-function assertPositiveInteger(name: string, value: number): void {
-  if (!Number.isInteger(value) || value <= 0) {
-    throw new Error(`${name} must be a positive integer`);
+function assertEntityId(name: string, value: string): void {
+  if (!isUuid(value)) {
+    throw new Error(`${name} must be a UUID`);
   }
 }
 
@@ -224,10 +225,10 @@ function mapInvite(row: InviteRow): WorkspaceInvite {
 async function recordWorkspaceAudit(
   client: PoolClient,
   input: {
-    workspaceId: number;
-    actorUserId: number;
+    workspaceId: string;
+    actorUserId: string;
     targetType: string;
-    targetId: number | null;
+    targetId: string | null;
     action: string;
     metadata?: Record<string, unknown>;
   },
@@ -249,8 +250,8 @@ async function recordWorkspaceAudit(
 
 async function assertWorkspaceOwner(
   client: PoolClient,
-  workspaceId: number,
-  userId: number,
+  workspaceId: string,
+  userId: string,
 ): Promise<void> {
   const result = await client.query<RoleRow>(
     'SELECT role FROM "Workspace_members" WHERE workspace_id = $1 AND user_id = $2',
@@ -264,7 +265,7 @@ async function assertWorkspaceOwner(
 
 async function countWorkspaceOwners(
   client: PoolClient,
-  workspaceId: number,
+  workspaceId: string,
 ): Promise<number> {
   const result = await client.query<CountRow>(
     'SELECT COUNT(*)::int AS count FROM "Workspace_members" WHERE workspace_id = $1 AND role = $2',
@@ -276,8 +277,8 @@ async function countWorkspaceOwners(
 
 async function getMembershipRole(
   client: PoolClient,
-  workspaceId: number,
-  userId: number,
+  workspaceId: string,
+  userId: string,
 ): Promise<WorkspaceRole | null> {
   const result = await client.query<RoleRow>(
     'SELECT role FROM "Workspace_members" WHERE workspace_id = $1 AND user_id = $2',
@@ -289,7 +290,7 @@ async function getMembershipRole(
 
 async function repairWorkspaceOwnerId(
   client: PoolClient,
-  workspaceId: number,
+  workspaceId: string,
 ): Promise<void> {
   await client.query(
     'UPDATE "Workspaces" SET owner_id = (' +
@@ -302,8 +303,8 @@ async function repairWorkspaceOwnerId(
   );
 }
 
-export async function listUserWorkspaces(userId: number): Promise<WorkspaceSummary[]> {
-  assertPositiveInteger("userId", userId);
+export async function listUserWorkspaces(userId: string): Promise<WorkspaceSummary[]> {
+  assertEntityId("userId", userId);
 
   const result = await query<WorkspaceSummaryRow>(
     'SELECT w.id, w.name, w.owner_id, wm.role, wm.joined_at, ' +
@@ -319,10 +320,10 @@ export async function listUserWorkspaces(userId: number): Promise<WorkspaceSumma
 }
 
 export async function createWorkspaceForUser(
-  userId: number,
+  userId: string,
   workspaceName: string,
 ): Promise<WorkspaceSummary> {
-  assertPositiveInteger("userId", userId);
+  assertEntityId("userId", userId);
   const name = parseWorkspaceName(workspaceName);
 
   return withTransaction(async (client) => {
@@ -358,11 +359,11 @@ export async function createWorkspaceForUser(
 }
 
 export async function assertUserCanUseWorkspace(
-  userId: number,
-  workspaceId: number,
+  userId: string,
+  workspaceId: string,
 ): Promise<WorkspaceSummary> {
-  assertPositiveInteger("userId", userId);
-  assertPositiveInteger("workspaceId", workspaceId);
+  assertEntityId("userId", userId);
+  assertEntityId("workspaceId", workspaceId);
 
   const result = await query<WorkspaceSummaryRow>(
     'SELECT w.id, w.name, w.owner_id, wm.role, wm.joined_at, ' +
@@ -382,11 +383,11 @@ export async function assertUserCanUseWorkspace(
 }
 
 export async function listWorkspaceMembers(
-  actorUserId: number,
-  workspaceId: number,
+  actorUserId: string,
+  workspaceId: string,
 ): Promise<WorkspaceMember[]> {
-  assertPositiveInteger("actorUserId", actorUserId);
-  assertPositiveInteger("workspaceId", workspaceId);
+  assertEntityId("actorUserId", actorUserId);
+  assertEntityId("workspaceId", workspaceId);
 
   return withTransaction(async (client) => {
     await assertWorkspaceOwner(client, workspaceId, actorUserId);
@@ -405,12 +406,12 @@ export async function listWorkspaceMembers(
 }
 
 export async function listWorkspaceAuditEvents(
-  actorUserId: number,
-  workspaceId: number,
+  actorUserId: string,
+  workspaceId: string,
   limit = 50,
 ): Promise<WorkspaceAuditEvent[]> {
-  assertPositiveInteger("actorUserId", actorUserId);
-  assertPositiveInteger("workspaceId", workspaceId);
+  assertEntityId("actorUserId", actorUserId);
+  assertEntityId("workspaceId", workspaceId);
 
   const boundedLimit = Number.isInteger(limit)
     ? Math.min(Math.max(limit, 1), 100)
@@ -446,14 +447,14 @@ export async function listWorkspaceAuditEvents(
 }
 
 export async function updateWorkspaceMemberRole(input: {
-  actorUserId: number;
-  workspaceId: number;
-  targetUserId: number;
+  actorUserId: string;
+  workspaceId: string;
+  targetUserId: string;
   role: WorkspaceRole;
 }): Promise<WorkspaceMember> {
-  assertPositiveInteger("actorUserId", input.actorUserId);
-  assertPositiveInteger("workspaceId", input.workspaceId);
-  assertPositiveInteger("targetUserId", input.targetUserId);
+  assertEntityId("actorUserId", input.actorUserId);
+  assertEntityId("workspaceId", input.workspaceId);
+  assertEntityId("targetUserId", input.targetUserId);
 
   return withTransaction(async (client) => {
     await assertWorkspaceOwner(client, input.workspaceId, input.actorUserId);
@@ -500,13 +501,13 @@ export async function updateWorkspaceMemberRole(input: {
 }
 
 export async function removeWorkspaceMember(input: {
-  actorUserId: number;
-  workspaceId: number;
-  targetUserId: number;
+  actorUserId: string;
+  workspaceId: string;
+  targetUserId: string;
 }): Promise<void> {
-  assertPositiveInteger("actorUserId", input.actorUserId);
-  assertPositiveInteger("workspaceId", input.workspaceId);
-  assertPositiveInteger("targetUserId", input.targetUserId);
+  assertEntityId("actorUserId", input.actorUserId);
+  assertEntityId("workspaceId", input.workspaceId);
+  assertEntityId("targetUserId", input.targetUserId);
 
   await withTransaction(async (client) => {
     await assertWorkspaceOwner(client, input.workspaceId, input.actorUserId);
@@ -546,11 +547,11 @@ export async function removeWorkspaceMember(input: {
 }
 
 export async function createWorkspaceInvite(input: {
-  actorUserId: number;
-  workspaceId: number;
+  actorUserId: string;
+  workspaceId: string;
 }): Promise<{ invite: WorkspaceInvite; token: string }> {
-  assertPositiveInteger("actorUserId", input.actorUserId);
-  assertPositiveInteger("workspaceId", input.workspaceId);
+  assertEntityId("actorUserId", input.actorUserId);
+  assertEntityId("workspaceId", input.workspaceId);
 
   return withTransaction(async (client) => {
     await assertWorkspaceOwner(client, input.workspaceId, input.actorUserId);
@@ -583,11 +584,11 @@ export async function createWorkspaceInvite(input: {
 }
 
 export async function listWorkspaceInvites(input: {
-  actorUserId: number;
-  workspaceId: number;
+  actorUserId: string;
+  workspaceId: string;
 }): Promise<WorkspaceInvite[]> {
-  assertPositiveInteger("actorUserId", input.actorUserId);
-  assertPositiveInteger("workspaceId", input.workspaceId);
+  assertEntityId("actorUserId", input.actorUserId);
+  assertEntityId("workspaceId", input.workspaceId);
 
   return withTransaction(async (client) => {
     await assertWorkspaceOwner(client, input.workspaceId, input.actorUserId);
@@ -608,13 +609,13 @@ export async function listWorkspaceInvites(input: {
 }
 
 export async function revokeWorkspaceInvite(input: {
-  actorUserId: number;
-  workspaceId: number;
-  inviteId: number;
+  actorUserId: string;
+  workspaceId: string;
+  inviteId: string;
 }): Promise<void> {
-  assertPositiveInteger("actorUserId", input.actorUserId);
-  assertPositiveInteger("workspaceId", input.workspaceId);
-  assertPositiveInteger("inviteId", input.inviteId);
+  assertEntityId("actorUserId", input.actorUserId);
+  assertEntityId("workspaceId", input.workspaceId);
+  assertEntityId("inviteId", input.inviteId);
 
   await withTransaction(async (client) => {
     await assertWorkspaceOwner(client, input.workspaceId, input.actorUserId);
@@ -669,10 +670,10 @@ export async function getInvitePreview(token: string): Promise<InvitePreview> {
 }
 
 export async function joinWorkspaceInvite(input: {
-  userId: number;
+  userId: string;
   token: string;
 }): Promise<WorkspaceSummary> {
-  assertPositiveInteger("userId", input.userId);
+  assertEntityId("userId", input.userId);
 
   if (input.token.trim().length === 0) {
     throw new Error("Invite token is required");

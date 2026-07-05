@@ -10,9 +10,8 @@ import {
   SELECT_CAMPAIGN_DELIVERY_SQL,
   SELECT_EMAIL_LOG_SUMMARY_SQL,
 } from "../src/lib/email-logs.ts";
+import { CAMPAIGN_ID, WORKSPACE_ID } from "./test-ids.mjs";
 
-const WORKSPACE_ID = 7;
-const CAMPAIGN_ID = 42;
 const DB_STUB_URL = "marekto-test:email-logs-db-stub";
 const SRC_ROOT = path.resolve(import.meta.dirname, "..", "src");
 

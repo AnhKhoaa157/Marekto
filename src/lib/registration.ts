@@ -16,8 +16,8 @@ const INSERT_MEMBERSHIP_SQL =
 export const EMAIL_TAKEN_ERROR = "Email already registered";
 
 export type RegistrationResult = {
-  userId: number;
-  workspaceId: number | null;
+  userId: string;
+  workspaceId: string | null;
 };
 
 export type VerifiedRegistration = {
@@ -47,16 +47,16 @@ export async function runRegistrationTransaction(
       throw new Error(EMAIL_TAKEN_ERROR);
     }
 
-    const userResult = await client.query<{ id: number }>(INSERT_USER_SQL, [
+    const userResult = await client.query<{ id: string }>(INSERT_USER_SQL, [
       registration.email,
       registration.passwordHash,
       ACCOUNT_ROLE,
     ]);
     const newUserId = userResult.rows[0].id;
-    let newWorkspaceId: number | null = null;
+    let newWorkspaceId: string | null = null;
 
     if (registration.workspaceName) {
-      const workspaceResult = await client.query<{ id: number }>(
+      const workspaceResult = await client.query<{ id: string }>(
         INSERT_WORKSPACE_SQL,
         [registration.workspaceName],
       );
