@@ -67,3 +67,15 @@ export async function requireServerUserSession(): Promise<AuthTokenPayload> {
 
   return session;
 }
+
+export async function requireServerWorkspaceSession(): Promise<
+  AuthTokenPayload & { workspaceId: number }
+> {
+  const session = await requireServerUserSession();
+
+  if (!session.workspaceId) {
+    redirect("/onboarding/workspace");
+  }
+
+  return { ...session, workspaceId: session.workspaceId };
+}

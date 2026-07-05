@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/layout/app-shell";
@@ -64,6 +65,10 @@ async function getDashboardData(searchQuery: string): Promise<DashboardData> {
       recentDeliveryFailures: [],
       error: null,
     };
+  }
+
+  if (!payload.workspaceId) {
+    redirect("/onboarding/workspace");
   }
 
   try {

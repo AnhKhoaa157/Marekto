@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
     ]);
     const row = result.rows[0];
 
-    if (!row || !row.workspace_id || !verifyPassword(credentials.password, row.password_hash)) {
+    if (!row || !verifyPassword(credentials.password, row.password_hash)) {
       throw new Error("Invalid credentials");
     }
 
@@ -92,9 +92,10 @@ export async function POST(request: NextRequest) {
     const workspaceId = row.workspace_id;
 
     const token = await signJWT({ userId, workspaceId });
+    const nextPath = workspaceId ? "/dashboard" : "/onboarding/workspace";
 
     const response = NextResponse.json(
-      { success: true, data: { token, userId, workspaceId } },
+      { success: true, data: { token, userId, workspaceId, nextPath } },
       { status: 200 },
     );
 

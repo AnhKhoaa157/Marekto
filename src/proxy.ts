@@ -19,7 +19,6 @@ export const config = {
     "/api/templates/:path*",
     "/api/campaigns/:path*",
     "/api/contacts/:path*",
-    "/api/profile/:path*",
   ],
 };
 

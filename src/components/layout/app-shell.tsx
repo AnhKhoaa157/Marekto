@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { SignOutButton } from "@/features/auth/components/sign-out-button";
+import { WorkspaceSwitcher } from "@/features/workspace/components/workspace-switcher";
 import { NavLink } from "@/components/layout/nav-link";
 import { RoutePrefetcher } from "@/components/layout/route-prefetcher";
 
@@ -12,7 +13,8 @@ export type AppRoute =
   | "/campaigns"
   | "/campaign-builder"
   | "/templates"
-  | "/profile";
+  | "/profile"
+  | "/settings/workspace/members";
 
 type AppShellProps = {
   activeRoute: AppRoute;
@@ -31,6 +33,7 @@ const navigationItems: ReadonlyArray<{ href: AppRoute; label: string }> = [
   { href: "/campaign-builder", label: "Campaign Builder" },
   { href: "/templates", label: "Templates" },
   { href: "/profile", label: "Profile" },
+  { href: "/settings/workspace/members", label: "Members" },
 ];
 
 export function AppShell({
@@ -61,6 +64,7 @@ export function AppShell({
               >
                 Marekto
               </Link>
+              {authenticated ? <WorkspaceSwitcher /> : null}
             </div>
             <div className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1 text-xs font-medium text-zinc-400">
               Tenant shell

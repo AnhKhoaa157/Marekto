@@ -52,3 +52,16 @@ test("replaces a spoofed workspace header with the verified JWT workspace", asyn
     assert.equal(result.headers.get("x-workspace-id"), "12");
   }
 });
+
+test("rejects a valid account token with no workspace context", async () => {
+  const result = await authenticateTenantRequest(
+    new Headers({ authorization: "Bearer valid" }),
+    cookies(null),
+    async () => ({ userId: 8, workspaceId: null }),
+  );
+
+  assert.deepEqual(result, {
+    ok: false,
+    error: "Unauthorized: Workspace required",
+  });
+});

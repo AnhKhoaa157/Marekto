@@ -8,6 +8,7 @@ type AuthMode = "login" | "register" | "admin-login";
 
 type AuthFormProps = {
   mode: AuthMode;
+  redirectTo?: string;
 };
 
 type AuthSuccessResponse = {
@@ -25,7 +26,8 @@ type AuthResponse = AuthSuccessResponse | AuthErrorResponse;
 type AuthenticatedData = {
   token: string;
   userId: number;
-  workspaceId: number;
+  workspaceId: number | null;
+  nextPath?: string;
 };
 
 type RegistrationVerificationData = {
@@ -43,7 +45,8 @@ function isAuthenticatedData(value: unknown): value is AuthenticatedData {
     isRecord(value) &&
     typeof value.token === "string" &&
     typeof value.userId === "number" &&
-    typeof value.workspaceId === "number"
+    (typeof value.workspaceId === "number" || value.workspaceId === null) &&
+    (value.nextPath === undefined || typeof value.nextPath === "string")
   );
 }
 
@@ -94,7 +97,7 @@ async function readAuthResponse(response: Response): Promise<AuthResponse> {
   };
 }
 
-export function AuthForm({ mode }: Readonly<AuthFormProps>) {
+export function AuthForm({ mode, redirectTo }: Readonly<AuthFormProps>) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -148,14 +151,14 @@ export function AuthForm({ mode }: Readonly<AuthFormProps>) {
   const title = isVerifyingRegistration
     ? "Verify your email"
     : isRegister
-      ? "Create your workspace"
+      ? "Create your account"
       : isAdminLogin
         ? "Admin sign in"
       : "Sign in to Marekto";
   const description = isRegister
     ? isVerifyingRegistration
       ? "Enter the 6-digit code sent to your email to finish creating the account."
-      : "Start with a real tenant workspace and owner account."
+      : "Create an account now, then create a workspace or join one by invite."
     : isAdminLogin
       ? "Use an administrator account to access the admin console."
     : "Use your existing account to load live tenant data.";
@@ -243,7 +246,9 @@ export function AuthForm({ mode }: Readonly<AuthFormProps>) {
       }
 
       setIsRedirecting(true);
-      router.push(isAdminLogin ? "/admin" : "/dashboard");
+      router.push(
+        isAdminLogin ? "/admin" : (redirectTo ?? result.data.nextPath ?? "/dashboard"),
+      );
       router.refresh();
     } catch (submitError) {
       setError(
@@ -356,11 +361,11 @@ export function AuthForm({ mode }: Readonly<AuthFormProps>) {
               disabled={isBusy}
               id={`${mode}-workspaceName`}
               name="workspaceName"
-              placeholder="Workspace name"
+              placeholder="Optional workspace name"
               type="text"
             />
             <p className="text-xs text-zinc-500">
-              Leave blank to let the backend assign a workspace label.
+              Leave blank to create or join a workspace after signup.
             </p>
           </div>
         ) : null}
@@ -496,7 +501,11 @@ export function AuthForm({ mode }: Readonly<AuthFormProps>) {
             Already have an account?{" "}
             <Link
               className="font-medium text-indigo-300 outline-none transition-colors hover:text-indigo-200 focus-visible:ring-2 focus-visible:ring-indigo-400"
-              href="/login"
+              href={
+                redirectTo
+                  ? `/login?next=${encodeURIComponent(redirectTo)}`
+                  : "/login"
+              }
             >
               Sign in
             </Link>
@@ -517,7 +526,11 @@ export function AuthForm({ mode }: Readonly<AuthFormProps>) {
               Need a workspace?{" "}
               <Link
                 className="font-medium text-indigo-300 outline-none transition-colors hover:text-indigo-200 focus-visible:ring-2 focus-visible:ring-indigo-400"
-                href="/register"
+                href={
+                  redirectTo
+                    ? `/register?next=${encodeURIComponent(redirectTo)}`
+                    : "/register"
+                }
               >
                 Create an account
               </Link>

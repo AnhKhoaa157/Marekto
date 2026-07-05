@@ -14,7 +14,7 @@ import { hashPassword } from "./password.ts";
 const REQUIRED_ENV_VARS = ["DATABASE_URL"] as const;
 const INITIALIZATION_TIMEOUT_MS = 60_000;
 const SLOW_QUERY_THRESHOLD_MS = 1_000;
-const MIGRATION_VERSION = "v12_account_workspace_role_split";
+const MIGRATION_VERSION = "v13_workspace_collaboration";
 const DEFAULT_ADMIN_EMAIL = "Admin@marekto.com";
 const DEFAULT_ADMIN_PASSWORD = "123456";
 const DEFAULT_ADMIN_ROLE = "admin";
@@ -708,6 +708,40 @@ CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_admin_user_id
   ON "Admin_audit_logs"(admin_user_id);
 CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_created_at
   ON "Admin_audit_logs"(created_at DESC);
+
+-- Phase 16: workspace collaboration, invite links, and owner-visible audit.
+ALTER TABLE "Registration_otps" ALTER COLUMN workspace_name DROP NOT NULL;
+
+CREATE TABLE IF NOT EXISTS "Workspace_invites" (
+  id SERIAL PRIMARY KEY,
+  workspace_id INT NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
+  token_hash VARCHAR UNIQUE NOT NULL,
+  created_by_user_id INT NOT NULL REFERENCES "Users"(id) ON DELETE CASCADE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  revoked_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_workspace_invites_workspace_id
+  ON "Workspace_invites"(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_workspace_invites_token_hash
+  ON "Workspace_invites"(token_hash);
+
+CREATE TABLE IF NOT EXISTS "Workspace_audit_logs" (
+  id SERIAL PRIMARY KEY,
+  workspace_id INT NOT NULL REFERENCES "Workspaces"(id) ON DELETE CASCADE,
+  actor_user_id INT REFERENCES "Users"(id) ON DELETE SET NULL,
+  target_type VARCHAR NOT NULL,
+  target_id INT,
+  action VARCHAR NOT NULL,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_workspace_audit_logs_workspace_id_created_at
+  ON "Workspace_audit_logs"(workspace_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_workspace_audit_logs_actor_user_id
+  ON "Workspace_audit_logs"(actor_user_id);
 
 -- Phase 16 prep: separate system account roles from per-workspace roles.
 -- "Users".role is only for platform access; workspace ownership lives in

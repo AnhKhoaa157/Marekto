@@ -12,6 +12,11 @@ test("verifies a valid tenant token", async () => {
   assert.deepEqual(await verifyJWT(token), { userId: 2, workspaceId: 9 });
 });
 
+test("verifies a valid no-workspace account token", async () => {
+  const token = await signJWT({ userId: 2, workspaceId: null });
+  assert.deepEqual(await verifyJWT(token), { userId: 2, workspaceId: null });
+});
+
 test("rejects malformed and expired tenant tokens", async () => {
   assert.equal(await verifyJWT("not-a-jwt"), null);
 

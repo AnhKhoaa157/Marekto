@@ -34,7 +34,7 @@ type VerifyRegistrationBody = {
 type PendingRegistrationRow = {
   email: string;
   password_hash: string;
-  workspace_name: string;
+  workspace_name: string | null;
   otp_hash: string;
   attempts: number;
   expires_at: Date;
@@ -118,9 +118,10 @@ export async function POST(request: NextRequest) {
     });
 
     const token = await signJWT({ userId, workspaceId });
+    const nextPath = workspaceId ? "/dashboard" : "/onboarding/workspace";
 
     const response = NextResponse.json(
-      { success: true, data: { token, userId, workspaceId } },
+      { success: true, data: { token, userId, workspaceId, nextPath } },
       { status: 201 },
     );
 

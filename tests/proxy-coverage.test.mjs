@@ -7,7 +7,15 @@ import test from "node:test";
 // proxy matcher. `admin` carries its own server-side administrator authorization
 // (`@/lib/admin-session`) and must NOT be tenant-scoped: injecting a single
 // `x-workspace-id` would misrepresent its cross-tenant reads.
-const SYSTEM_API_ROOTS = new Set(["auth", "openapi.json", "worker", "admin"]);
+const SYSTEM_API_ROOTS = new Set([
+  "auth",
+  "openapi.json",
+  "worker",
+  "admin",
+  "profile",
+  "workspace",
+  "workspaces",
+]);
 
 test("every tenant API root is listed in the proxy matcher", async () => {
   const apiRoot = path.resolve("src/app/api");

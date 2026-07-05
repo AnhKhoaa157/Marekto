@@ -17,17 +17,17 @@ export const EMAIL_TAKEN_ERROR = "Email already registered";
 
 export type RegistrationResult = {
   userId: number;
-  workspaceId: number;
+  workspaceId: number | null;
 };
 
 export type VerifiedRegistration = {
   email: string;
   passwordHash: string;
-  workspaceName: string;
+  workspaceName: string | null;
 };
 
 /**
- * Provision a workspace + user account + owner membership inside a single transaction.
+ * Provision a user account and, when requested, its first owner workspace.
  * This runs before tenant context exists, so it intentionally uses a raw pooled
  * client and only touches non-RLS bootstrap tables.
  */
@@ -47,25 +47,28 @@ export async function runRegistrationTransaction(
       throw new Error(EMAIL_TAKEN_ERROR);
     }
 
-    const workspaceResult = await client.query<{ id: number }>(
-      INSERT_WORKSPACE_SQL,
-      [registration.workspaceName],
-    );
-    const newWorkspaceId = workspaceResult.rows[0].id;
-
     const userResult = await client.query<{ id: number }>(INSERT_USER_SQL, [
       registration.email,
       registration.passwordHash,
       ACCOUNT_ROLE,
     ]);
     const newUserId = userResult.rows[0].id;
+    let newWorkspaceId: number | null = null;
 
-    await client.query(UPDATE_WORKSPACE_OWNER_SQL, [newUserId, newWorkspaceId]);
-    await client.query(INSERT_MEMBERSHIP_SQL, [
-      newWorkspaceId,
-      newUserId,
-      WORKSPACE_OWNER_ROLE,
-    ]);
+    if (registration.workspaceName) {
+      const workspaceResult = await client.query<{ id: number }>(
+        INSERT_WORKSPACE_SQL,
+        [registration.workspaceName],
+      );
+      newWorkspaceId = workspaceResult.rows[0].id;
+
+      await client.query(UPDATE_WORKSPACE_OWNER_SQL, [newUserId, newWorkspaceId]);
+      await client.query(INSERT_MEMBERSHIP_SQL, [
+        newWorkspaceId,
+        newUserId,
+        WORKSPACE_OWNER_ROLE,
+      ]);
+    }
 
     await client.query("COMMIT");
 
