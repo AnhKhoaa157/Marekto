@@ -101,3 +101,33 @@ jobs:
 
       - name: PostgreSQL integration suite
         run: npm run test:integration
+
+  data-intelligence:
+    name: Python data intelligence service
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: services/data-intelligence
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: services/data-intelligence/pyproject.toml
+
+      - name: Install service dependencies
+        run: python -m pip install -e .[dev]
+
+      - name: Ruff
+        run: ruff check .
+
+      - name: Mypy
+        run: mypy app tests
+
+      - name: Pytest
+        run: pytest
