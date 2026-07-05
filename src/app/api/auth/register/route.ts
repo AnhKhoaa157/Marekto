@@ -34,7 +34,7 @@ type RegisterBody = {
 type ParsedRegistration = {
   email: string;
   password: string;
-  workspaceName: string;
+  workspaceName: string | null;
 };
 
 function parseRegisterBody(body: RegisterBody): ParsedRegistration {
@@ -55,7 +55,7 @@ function parseRegisterBody(body: RegisterBody): ParsedRegistration {
   const workspaceName =
     typeof body.workspaceName === "string" && body.workspaceName.trim().length > 0
       ? body.workspaceName.trim()
-      : `Workspace of ${email}`;
+      : null;
 
   return { email, password: body.password, workspaceName };
 }

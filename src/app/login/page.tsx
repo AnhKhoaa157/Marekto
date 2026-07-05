@@ -23,12 +23,23 @@ async function redirectAuthenticatedUser() {
   const payload = token ? await verifyJWT(token) : null;
 
   if (payload) {
-    redirect("/dashboard");
+    redirect(payload.workspaceId ? "/dashboard" : "/onboarding/workspace");
   }
 }
 
-export default async function LoginPage() {
+type LoginPageProps = {
+  searchParams?: Promise<{ next?: string | string[] }>;
+};
+
+function parseNextPath(value: string | string[] | undefined): string | undefined {
+  const nextPath = Array.isArray(value) ? value[0] : value;
+  return nextPath?.startsWith("/invite/") ? nextPath : undefined;
+}
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
   await redirectAuthenticatedUser();
+  const params = searchParams ? await searchParams : {};
+  const nextPath = parseNextPath(params.next);
 
   return (
     <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden text-zinc-50 sm:px-6 lg:px-8">
@@ -53,7 +64,7 @@ export default async function LoginPage() {
           </p>
         </div>
 
-        <AuthForm mode="login" />
+        <AuthForm mode="login" redirectTo={nextPath} />
 
         <div className="mt-8 flex justify-center">
           <BackToHomeLink />

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { CampaignDetail } from "@/features/campaigns/components/campaign-detail";
-import { requireServerUserSession } from "@/lib/server-auth";
+import { requireServerWorkspaceSession } from "@/lib/server-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +18,7 @@ type CampaignDetailPageProps = {
 export default async function CampaignDetailPage({
   params,
 }: Readonly<CampaignDetailPageProps>) {
-  await requireServerUserSession();
+  await requireServerWorkspaceSession();
 
   const { id } = await params;
   const campaignId = Number(id);

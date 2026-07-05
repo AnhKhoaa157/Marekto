@@ -1,13 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { verifyJWT, type AuthTokenPayload } from "@/lib/auth";
+import {
+  authenticateAccountRequest,
+  statusForAccountAuthError,
+  type AccountIdentity,
+} from "@/lib/account-auth";
 import { initializeDatabase, query } from "@/lib/db";
 import {
   isProfileValidationError,
   parseProfileUpdateBody,
 } from "@/lib/profile";
-import { authenticateTenantRequest } from "@/lib/proxy-auth";
-import { getServerAuthSession } from "@/lib/server-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,29 +38,17 @@ function statusForError(message: string): number {
     return 404;
   }
 
-  return isProfileValidationError(message) ? 400 : 500;
+  if (isProfileValidationError(message)) {
+    return 400;
+  }
+
+  return statusForAccountAuthError(message);
 }
 
 async function requireApiSession(
   request: NextRequest,
-): Promise<AuthTokenPayload> {
-  const cookieSession = await getServerAuthSession();
-
-  if (cookieSession) {
-    return cookieSession;
-  }
-
-  const authentication = await authenticateTenantRequest(
-    request.headers,
-    request.cookies,
-    verifyJWT,
-  );
-
-  if (!authentication.ok) {
-    throw new Error("Unauthorized");
-  }
-
-  return authentication.identity;
+): Promise<AccountIdentity> {
+  return authenticateAccountRequest(request);
 }
 
 export async function GET(request: NextRequest) {

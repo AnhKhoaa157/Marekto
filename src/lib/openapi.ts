@@ -61,9 +61,10 @@ export const openApiSpec = {
         properties: {
           token: { type: "string", description: "Signed JWT" },
           userId: { type: "integer", example: 1 },
-          workspaceId: { type: "integer", example: 1 },
+          workspaceId: { type: "integer", nullable: true, example: 1 },
+          nextPath: { type: "string", example: "/dashboard" },
         },
-        required: ["token", "userId", "workspaceId"],
+        required: ["token", "userId", "workspaceId", "nextPath"],
       },
       AuthResponse: {
         type: "object",
@@ -382,7 +383,7 @@ export const openApiSpec = {
         tags: ["Auth"],
         summary: "Start registration and email an OTP",
         description:
-          "Validates the requested owner account, stores a pending registration with hashed secrets, and sends a real OTP email. The account is created only after /api/auth/register/verify succeeds.",
+          "Validates the requested account, stores a pending registration with hashed secrets, and sends a real OTP email. Workspace creation is optional; the account is created only after /api/auth/register/verify succeeds.",
         security: [],
         requestBody: {
           required: true,
@@ -418,7 +419,7 @@ export const openApiSpec = {
         tags: ["Auth"],
         summary: "Verify registration OTP and create workspace",
         description:
-          "Verifies the emailed OTP, atomically creates the Workspace, User, and owner Workspace_members binding, then returns a signed JWT and sets the auth_token cookie.",
+          "Verifies the emailed OTP, creates the User and optionally the first owner Workspace_members binding, then returns a signed JWT and sets the auth_token cookie. If no workspace was requested, workspaceId is null and nextPath points to onboarding.",
         security: [],
         requestBody: {
           required: true,
@@ -430,7 +431,7 @@ export const openApiSpec = {
         },
         responses: {
           "201": {
-            description: "Registered. Returns JWT, userId and workspaceId.",
+            description: "Registered. Returns JWT, userId, workspaceId, and nextPath.",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/AuthResponse" },
@@ -454,7 +455,7 @@ export const openApiSpec = {
         tags: ["Auth"],
         summary: "Authenticate and receive a JWT",
         description:
-          "Validates credentials, resolves the user's integer workspace id, returns a signed JWT and sets the auth_token cookie.",
+          "Validates credentials, resolves the user's default workspace if one exists, returns a signed JWT and sets the auth_token cookie. Users without a workspace receive workspaceId null and an onboarding nextPath.",
         security: [],
         requestBody: {
           required: true,
@@ -466,7 +467,7 @@ export const openApiSpec = {
         },
         responses: {
           "200": {
-            description: "Authenticated. Returns JWT, userId and workspaceId.",
+            description: "Authenticated. Returns JWT, userId, workspaceId, and nextPath.",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/AuthResponse" },

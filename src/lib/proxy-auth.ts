@@ -3,7 +3,7 @@ const BEARER_PREFIX = "Bearer ";
 
 type TenantIdentity = {
   userId: number;
-  workspaceId: number;
+  workspaceId: number | null;
 };
 
 type VerifyToken = (token: string) => Promise<TenantIdentity | null>;
@@ -53,6 +53,10 @@ export async function authenticateTenantRequest(
 
   if (!identity) {
     return { ok: false, error: "Unauthorized: Invalid or expired token" };
+  }
+
+  if (!identity.workspaceId) {
+    return { ok: false, error: "Unauthorized: Workspace required" };
   }
 
   const forwardedHeaders = new Headers(headers);

@@ -13,7 +13,7 @@ const JWT_EXPIRATION = "7d";
 
 export type AuthTokenPayload = {
   userId: number;
-  workspaceId: number;
+  workspaceId: number | null;
 };
 
 let cachedSecretKey: Uint8Array | null = null;
@@ -37,13 +37,19 @@ function isValidId(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
 
+function isValidWorkspaceId(value: unknown): value is number | null {
+  return value === null || isValidId(value);
+}
+
 /**
  * Sign a JWT embedding the integer tenant context. Throws if `JWT_SECRET` is
  * not configured or the payload IDs are not positive integers.
  */
 export async function signJWT(payload: AuthTokenPayload): Promise<string> {
-  if (!isValidId(payload.userId) || !isValidId(payload.workspaceId)) {
-    throw new Error("Invalid JWT payload: userId and workspaceId must be positive integers");
+  if (!isValidId(payload.userId) || !isValidWorkspaceId(payload.workspaceId)) {
+    throw new Error(
+      "Invalid JWT payload: userId must be positive and workspaceId must be positive or null",
+    );
   }
 
   return new SignJWT({ userId: payload.userId, workspaceId: payload.workspaceId })
@@ -74,7 +80,7 @@ export async function verifyJWT(token: string): Promise<AuthTokenPayload | null>
 
     const { userId, workspaceId } = payload as Record<string, unknown>;
 
-    if (!isValidId(userId) || !isValidId(workspaceId)) {
+    if (!isValidId(userId) || !isValidWorkspaceId(workspaceId)) {
       return null;
     }
 

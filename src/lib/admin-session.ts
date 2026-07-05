@@ -27,8 +27,8 @@ async function readApiSession(
 ): Promise<AdminSessionContext | null> {
   const cookieSession = await getServerAuthSession();
 
-  if (cookieSession) {
-    return cookieSession;
+  if (cookieSession?.workspaceId) {
+    return { userId: cookieSession.userId, workspaceId: cookieSession.workspaceId };
   }
 
   const authentication = await authenticateTenantRequest(
@@ -37,7 +37,14 @@ async function readApiSession(
     verifyJWT,
   );
 
-  return authentication.ok ? authentication.identity : null;
+  if (!authentication.ok || !authentication.identity.workspaceId) {
+    return null;
+  }
+
+  return {
+    userId: authentication.identity.userId,
+    workspaceId: authentication.identity.workspaceId,
+  };
 }
 
 async function lookupUser(userId: number): Promise<AdminUserRecord | null> {
@@ -83,8 +90,15 @@ export async function getAdminSessionState(): Promise<AdminSessionState> {
     return { status: "unauthenticated" };
   }
 
+  if (!session.workspaceId) {
+    return { status: "unauthenticated" };
+  }
+
   const user = await lookupUser(session.userId);
-  const authorization = resolveAdminAuthorization(session, user);
+  const authorization = resolveAdminAuthorization(
+    { userId: session.userId, workspaceId: session.workspaceId },
+    user,
+  );
 
   if (authorization.ok) {
     return { status: "authorized", identity: authorization.identity };
