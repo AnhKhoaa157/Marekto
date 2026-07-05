@@ -6,6 +6,11 @@ import {
 } from "@/lib/account-auth";
 import { signJWT } from "@/lib/auth";
 import {
+  limitErrorResponse,
+  PlanLimitExceededError,
+  statusForPlanLimitError,
+} from "@/lib/entitlements";
+import {
   createWorkspaceForUser,
   listUserWorkspaces,
   parseWorkspaceName,
@@ -41,6 +46,20 @@ function statusForError(message: string): number {
   return statusForAccountAuthError(message);
 }
 
+function errorResponse(error: unknown, fallback: string) {
+  if (error instanceof PlanLimitExceededError) {
+    return NextResponse.json(limitErrorResponse(error), {
+      status: statusForPlanLimitError(error) ?? 402,
+    });
+  }
+
+  const message = error instanceof Error ? error.message : fallback;
+  return NextResponse.json(
+    { success: false, error: message },
+    { status: statusForError(message) },
+  );
+}
+
 export async function GET(request: NextRequest) {
   try {
     const identity = await authenticateAccountRequest(request);
@@ -51,11 +70,7 @@ export async function GET(request: NextRequest) {
       data: { workspaces, currentWorkspaceId: identity.workspaceId },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to load workspaces";
-    return NextResponse.json(
-      { success: false, error: message },
-      { status: statusForError(message) },
-    );
+    return errorResponse(error, "Failed to load workspaces");
   }
 }
 
@@ -79,10 +94,6 @@ export async function POST(request: NextRequest) {
     setAuthCookie(response, token);
     return response;
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to create workspace";
-    return NextResponse.json(
-      { success: false, error: message },
-      { status: statusForError(message) },
-    );
+    return errorResponse(error, "Failed to create workspace");
   }
 }

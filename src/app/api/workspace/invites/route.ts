@@ -5,6 +5,11 @@ import {
   statusForAccountAuthError,
 } from "@/lib/account-auth";
 import {
+  limitErrorResponse,
+  PlanLimitExceededError,
+  statusForPlanLimitError,
+} from "@/lib/entitlements";
+import {
   createWorkspaceInvite,
   listWorkspaceInvites,
 } from "@/lib/workspace-collaboration";
@@ -36,6 +41,20 @@ function buildInviteUrl(request: NextRequest, token: string): string {
   return new URL(`/invite/${encodeURIComponent(token)}`, request.url).toString();
 }
 
+function errorResponse(error: unknown, fallback: string) {
+  if (error instanceof PlanLimitExceededError) {
+    return NextResponse.json(limitErrorResponse(error), {
+      status: statusForPlanLimitError(error) ?? 402,
+    });
+  }
+
+  const message = error instanceof Error ? error.message : fallback;
+  return NextResponse.json(
+    { success: false, error: message },
+    { status: statusForError(message) },
+  );
+}
+
 export async function GET(request: NextRequest) {
   try {
     const identity = await authenticateAccountRequest(request);
@@ -47,11 +66,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: { invites } });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to load invites";
-    return NextResponse.json(
-      { success: false, error: message },
-      { status: statusForError(message) },
-    );
+    return errorResponse(error, "Failed to load invites");
   }
 }
 
@@ -72,10 +87,6 @@ export async function POST(request: NextRequest) {
       { status: 201 },
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to create invite";
-    return NextResponse.json(
-      { success: false, error: message },
-      { status: statusForError(message) },
-    );
+    return errorResponse(error, "Failed to create invite");
   }
 }

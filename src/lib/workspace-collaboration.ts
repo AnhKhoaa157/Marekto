@@ -4,6 +4,10 @@ import type { PoolClient } from "pg";
 
 import { sanitizeAuditMetadata } from "./admin-audit.ts";
 import { initializeDatabase, query, withTransaction } from "./db.ts";
+import {
+  assertCanCreateOwnedWorkspace,
+  assertWorkspaceHasMemberCapacity,
+} from "./entitlements.ts";
 import { isUuid } from "./identifiers.ts";
 
 const WORKSPACE_OWNER_ROLE = "owner";
@@ -327,6 +331,8 @@ export async function createWorkspaceForUser(
   const name = parseWorkspaceName(workspaceName);
 
   return withTransaction(async (client) => {
+    await assertCanCreateOwnedWorkspace(userId, client);
+
     const workspaceResult = await client.query<IdRow>(
       'INSERT INTO "Workspaces" (name, owner_id) VALUES ($1, $2) RETURNING id',
       [name, userId],
@@ -555,6 +561,7 @@ export async function createWorkspaceInvite(input: {
 
   return withTransaction(async (client) => {
     await assertWorkspaceOwner(client, input.workspaceId, input.actorUserId);
+    await assertWorkspaceHasMemberCapacity(input.workspaceId, client);
 
     const token = createInviteToken();
     const result = await client.query<InviteRow>(
@@ -710,6 +717,8 @@ export async function joinWorkspaceInvite(input: {
         joined_at: null,
       };
     }
+
+    await assertWorkspaceHasMemberCapacity(invite.workspace_id, client);
 
     await client.query(
       'INSERT INTO "Workspace_members" (workspace_id, user_id, role) VALUES ($1, $2, $3)',

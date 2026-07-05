@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 import { WORKSPACE_ID } from "./test-ids.mjs";
 const DB_STUB_URL = "marekto-test:contacts-db-stub";
 const SRC_ROOT = path.resolve(import.meta.dirname, "..", "src");
+const DB_FILE_URL = pathToFileURL(path.join(SRC_ROOT, "lib", "db.ts")).href;
 
 // Keep enrichment deterministic: without configuration the route must fall
 // back to saving the contact unchanged with an "unavailable" status.
@@ -28,9 +29,25 @@ export async function initializeDatabase() {
   state.initializeDatabaseCalls += 1;
 }
 
+export async function query(text, params) {
+  state.queries ??= [];
+  state.queries.push({ text, params });
+  return { rows: [] };
+}
+
 export async function withWorkspace(workspaceId, callback) {
   state.withWorkspaceCalls.push(workspaceId);
   return callback(state.client);
+}
+
+export async function withTransaction(callback) {
+  return callback({
+    query: async (text, params) => {
+      state.transactionQueries ??= [];
+      state.transactionQueries.push({ text, params });
+      return { rows: [] };
+    },
+  });
 }
 `;
 
@@ -54,7 +71,7 @@ registerHooks({
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url === DB_STUB_URL) {
+    if (url === DB_STUB_URL || url === DB_FILE_URL) {
       return { format: "module", source: DB_STUB_SOURCE, shortCircuit: true };
     }
 
@@ -70,6 +87,8 @@ const { NextRequest } = await import("next/server.js");
 function resetDbStub(client = null) {
   dbStub.initializeDatabaseCalls = 0;
   dbStub.withWorkspaceCalls = [];
+  dbStub.queries = [];
+  dbStub.transactionQueries = [];
   dbStub.client = client;
 }
 

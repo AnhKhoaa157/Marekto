@@ -19,6 +19,8 @@ const UUID_IDENTIFIER_COLUMNS = {
   Users: ["id"],
   Workspaces: ["id", "owner_id"],
   Workspace_members: ["id", "workspace_id", "user_id"],
+  User_entitlements: ["id", "user_id"],
+  Workspace_subscriptions: ["id", "workspace_id"],
   Contacts: ["id", "workspace_id"],
   Lists: ["id", "workspace_id"],
   Contact_list_relation: ["workspace_id", "contact_id", "list_id"],
@@ -29,6 +31,7 @@ const UUID_IDENTIFIER_COLUMNS = {
   Admin_audit_logs: ["id", "admin_user_id", "target_id"],
   Workspace_invites: ["id", "workspace_id", "created_by_user_id"],
   Workspace_audit_logs: ["id", "workspace_id", "actor_user_id", "target_id"],
+  Usage_counters: ["id", "workspace_id", "user_id"],
 };
 
 function applySchemaInFreshProcess() {
