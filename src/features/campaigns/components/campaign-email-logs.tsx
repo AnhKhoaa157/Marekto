@@ -469,6 +469,7 @@ export function CampaignEmailLogs({ campaignId }: Readonly<CampaignEmailLogsProp
             <table className="w-full min-w-full text-left text-sm">
               <thead className="border-b border-zinc-800 bg-zinc-950 text-xs font-medium uppercase tracking-wide text-zinc-500">
                 <tr>
+                  <th className="px-4 py-3">ID</th>
                   <th className="px-4 py-3">Recipient</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Personalization source</th>
@@ -494,11 +495,11 @@ export function CampaignEmailLogs({ campaignId }: Readonly<CampaignEmailLogsProp
                   return (
                     <Fragment key={log.id}>
                       <tr className={log.status === "failed" ? "bg-red-500/5" : undefined}>
+                        <td className="whitespace-nowrap px-4 py-4 align-top font-mono text-xs text-zinc-400">
+                          {formatEntityCode("EL", log.id)}
+                        </td>
                         <td className="min-w-48 px-4 py-4 align-top">
                           <p className="font-medium text-zinc-100">{recipient}</p>
-                          <p className="mt-0.5 text-xs text-zinc-600">
-                            {formatEntityCode("EL", log.id)}
-                          </p>
                           {log.recipient_email && log.recipient_email !== recipient ? (
                             <p className="mt-1 text-sm text-zinc-500">
                               {log.recipient_email}
@@ -548,7 +549,7 @@ export function CampaignEmailLogs({ campaignId }: Readonly<CampaignEmailLogsProp
                       </tr>
                       {isExpanded ? (
                         <tr id={detailsId}>
-                          <td className="bg-zinc-950 px-4 py-4" colSpan={5}>
+                          <td className="bg-zinc-950 px-4 py-4" colSpan={6}>
                             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                               {deliveryDiagnostic ? (
                                 <div>

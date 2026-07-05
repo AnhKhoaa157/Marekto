@@ -241,6 +241,7 @@ export function ListsManager() {
               <table className="w-full min-w-full text-left text-sm">
                 <thead className="border-b border-zinc-800 text-xs font-medium uppercase tracking-wide text-zinc-500">
                   <tr>
+                    <th className="py-3 pr-4">ID</th>
                     <th className="py-3 pr-4">List</th>
                     <th className="py-3 pr-4">Created</th>
                     <th className="py-3 text-right">Actions</th>
@@ -249,11 +250,11 @@ export function ListsManager() {
                 <tbody className="divide-y divide-zinc-800">
                   {lists.map((list) => (
                     <tr key={list.id}>
+                      <td className="py-4 pr-4 font-mono text-xs text-zinc-400">
+                        {formatEntityCode("LS", list.id)}
+                      </td>
                       <td className="py-4 pr-4">
                         <p className="font-medium text-zinc-100">{list.name}</p>
-                        <p className="mt-0.5 text-xs text-zinc-500">
-                          {formatEntityCode("LS", list.id)}
-                        </p>
                         <p className="mt-1 text-sm text-zinc-500">
                           {list.description || "No description"}
                         </p>

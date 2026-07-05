@@ -128,6 +128,7 @@ export default async function AdminWorkspacesPage({ searchParams }: PageProps) {
               <AdminTableScroll>
                 <thead className="border-b border-zinc-800 text-xs font-medium uppercase tracking-wide text-zinc-500">
                   <tr>
+                    <th className="py-3 pr-4">ID</th>
                     <th className="py-3 pr-4">Workspace</th>
                     <th className="py-3 pr-4">Owner</th>
                     <th className="py-3 pr-4">Members</th>
@@ -139,6 +140,9 @@ export default async function AdminWorkspacesPage({ searchParams }: PageProps) {
                 <tbody className="divide-y divide-zinc-800">
                   {result.items.map((workspace) => (
                     <tr className="text-zinc-300" key={workspace.id}>
+                      <td className="py-4 pr-4 font-mono text-xs text-zinc-400">
+                        {formatEntityCode("WS", workspace.id)}
+                      </td>
                       <td className="py-4 pr-4">
                         <Link
                           className="font-medium text-zinc-50 outline-none transition-colors hover:text-indigo-300 focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-indigo-400"
@@ -146,9 +150,6 @@ export default async function AdminWorkspacesPage({ searchParams }: PageProps) {
                         >
                           {workspace.name}
                         </Link>
-                        <p className="text-xs text-zinc-500">
-                          {formatEntityCode("WS", workspace.id)}
-                        </p>
                       </td>
                       <td className="py-4 pr-4 text-zinc-400">
                         {workspace.owner_email ?? "—"}

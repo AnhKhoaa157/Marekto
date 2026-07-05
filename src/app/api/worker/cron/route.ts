@@ -42,7 +42,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const SELECT_ACTIVE_WORKSPACES_SQL =
-  'SELECT id AS workspace_id FROM "Workspaces" ORDER BY id ASC';
+  'SELECT id AS workspace_id FROM "Workspaces" ORDER BY created_at ASC, id ASC';
 
 const SELECT_TEMPLATE_SQL =
   'SELECT id, body_html FROM "Templates" WHERE id = $1 AND workspace_id = $2';

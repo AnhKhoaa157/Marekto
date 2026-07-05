@@ -132,6 +132,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
               <AdminTableScroll>
                 <thead className="border-b border-zinc-800 text-xs font-medium uppercase tracking-wide text-zinc-500">
                   <tr>
+                    <th className="py-3 pr-4">ID</th>
                     <th className="py-3 pr-4">Email</th>
                     <th className="py-3 pr-4">System role</th>
                     <th className="py-3 pr-4">Workspaces</th>
@@ -141,13 +142,13 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                 <tbody className="divide-y divide-zinc-800">
                   {result.items.map((user) => (
                     <tr className="text-zinc-300" key={user.id}>
+                      <td className="py-4 pr-4 font-mono text-xs text-zinc-400">
+                        {formatEntityCode("US", user.id)}
+                      </td>
                       <td className="py-4 pr-4">
                         <span className="font-medium text-zinc-50">
                           {user.email}
                         </span>
-                        <p className="text-xs text-zinc-500">
-                          {formatEntityCode("US", user.id)}
-                        </p>
                       </td>
                       <td className="py-4 pr-4">
                         <span

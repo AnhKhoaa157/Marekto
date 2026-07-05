@@ -15,6 +15,22 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..");
 const applySchemaScript = path.join(repoRoot, "scripts", "apply-schema.mjs");
 
+const UUID_IDENTIFIER_COLUMNS = {
+  Users: ["id"],
+  Workspaces: ["id", "owner_id"],
+  Workspace_members: ["id", "workspace_id", "user_id"],
+  Contacts: ["id", "workspace_id"],
+  Lists: ["id", "workspace_id"],
+  Contact_list_relation: ["workspace_id", "contact_id", "list_id"],
+  Templates: ["id", "workspace_id"],
+  Campaigns: ["id", "workspace_id", "template_id"],
+  Email_logs: ["id", "workspace_id", "campaign_id", "contact_id"],
+  Ai_outputs: ["id", "workspace_id", "created_by"],
+  Admin_audit_logs: ["id", "admin_user_id", "target_id"],
+  Workspace_invites: ["id", "workspace_id", "created_by_user_id"],
+  Workspace_audit_logs: ["id", "workspace_id", "actor_user_id", "target_id"],
+};
+
 function applySchemaInFreshProcess() {
   return spawnSync(
     process.execPath,
@@ -63,6 +79,26 @@ test(
         assert.ok(exists.rows[0].reg, `Expected table ${table} to exist`);
       }
 
+      for (const [table, columns] of Object.entries(UUID_IDENTIFIER_COLUMNS)) {
+        const types = await client.query(
+          "SELECT column_name, data_type FROM information_schema.columns " +
+            "WHERE table_schema = 'public' AND table_name = $1 AND column_name = ANY($2::text[])",
+          [table, columns],
+        );
+        assert.equal(
+          types.rowCount,
+          columns.length,
+          `${table} must expose every expected identifier column`,
+        );
+        for (const row of types.rows) {
+          assert.equal(
+            row.data_type,
+            "uuid",
+            `${table}.${row.column_name} must use UUID`,
+          );
+        }
+      }
+
       // FORCE ROW LEVEL SECURITY is enabled on every tenant-owned table.
       for (const table of TENANT_OWNED_TABLES) {
         const rls = await client.query(
@@ -87,6 +123,11 @@ test(
         ["idempotency-sentinel"],
       );
       const sentinelId = sentinel.rows[0].id;
+      assert.match(
+        sentinelId,
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+        "Database-generated identifiers must be UUIDs",
+      );
 
       // Second application in another fresh process.
       const second = applySchemaInFreshProcess();

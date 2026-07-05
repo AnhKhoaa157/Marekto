@@ -307,6 +307,7 @@ export function ContactsManager() {
               <table className="w-full min-w-full text-left text-sm">
                 <thead className="border-b border-zinc-800 text-xs font-medium uppercase tracking-wide text-zinc-500">
                   <tr>
+                    <th className="py-3 pr-4">ID</th>
                     <th className="py-3 pr-4">Name</th>
                     <th className="py-3 pr-4">Email</th>
                     <th className="py-3 pr-4">Phone</th>
@@ -331,11 +332,11 @@ export function ContactsManager() {
 
                     return (
                       <tr key={contact.id}>
+                        <td className="py-4 pr-4 align-top font-mono text-xs text-zinc-400">
+                          {formatEntityCode("CT", contact.id)}
+                        </td>
                         <td className="py-4 pr-4 font-medium text-zinc-100">
                           <p>{getContactName(contact)}</p>
-                          <p className="mt-0.5 text-xs font-normal text-zinc-500">
-                            {formatEntityCode("CT", contact.id)}
-                          </p>
                           {city || tags.length > 0 || genericProperties.length > 0 ? (
                             <div className="mt-2 flex max-w-sm flex-wrap gap-1.5">
                               {city ? (

@@ -10,7 +10,9 @@ export const metadata = {
 };
 
 export default async function WorkspaceMembersPage() {
-  await requireServerWorkspaceSession();
+  // Authentication and workspace context are verified server-side before the
+  // client manager (and therefore its first members request) can render.
+  const session = await requireServerWorkspaceSession();
 
   return (
     <AppShell
@@ -19,7 +21,7 @@ export default async function WorkspaceMembersPage() {
       eyebrow="Workspace settings"
       title="Members"
     >
-      <WorkspaceMembersManager />
+      <WorkspaceMembersManager workspaceId={session.workspaceId} />
     </AppShell>
   );
 }

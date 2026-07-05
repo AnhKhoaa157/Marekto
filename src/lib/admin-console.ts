@@ -80,7 +80,7 @@ export const SELECT_ADMIN_WORKSPACES_SQL =
   'FROM "Workspaces" w ' +
   'LEFT JOIN "Users" owner ON owner.id = w.owner_id ' +
   "WHERE ($1 = '' OR w.name ILIKE '%' || $1 || '%') " +
-  "ORDER BY w.id ASC LIMIT $2 OFFSET $3";
+  "ORDER BY w.created_at DESC, w.id DESC LIMIT $2 OFFSET $3";
 
 export const COUNT_ADMIN_WORKSPACES_SQL =
   'SELECT COUNT(*)::int AS count FROM "Workspaces" w ' +
@@ -222,7 +222,7 @@ export const SELECT_ADMIN_USERS_SQL =
   '(SELECT COUNT(*)::int FROM "Workspace_members" m WHERE m.user_id = u.id) AS membership_count ' +
   'FROM "Users" u ' +
   "WHERE ($1 = '' OR u.email ILIKE '%' || $1 || '%') " +
-  "ORDER BY u.id ASC LIMIT $2 OFFSET $3";
+  "ORDER BY u.created_at DESC, u.id DESC LIMIT $2 OFFSET $3";
 
 export const COUNT_ADMIN_USERS_SQL =
   'SELECT COUNT(*)::int AS count FROM "Users" u ' +

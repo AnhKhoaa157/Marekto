@@ -8,9 +8,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const INSERT_CONTACT_SQL =
-  'INSERT INTO "Contacts" (workspace_id, email, first_name, last_name, phone, properties) VALUES ($1, $2, $3, $4, $5, $6::jsonb) RETURNING *';
+  'INSERT INTO "Contacts" (workspace_id, email, first_name, last_name, phone, properties) VALUES ($1, $2, $3, $4, $5, $6::jsonb) RETURNING id, workspace_id, email, first_name, last_name, phone, properties, created_at';
 const SELECT_CONTACTS_SQL =
-  'SELECT * FROM "Contacts" WHERE workspace_id = $1 ORDER BY created_at DESC, id DESC';
+  'SELECT id, workspace_id, email, first_name, last_name, phone, properties, created_at FROM "Contacts" WHERE workspace_id = $1 ORDER BY created_at DESC, id DESC';
 
 type ContactRow = {
   id: string;

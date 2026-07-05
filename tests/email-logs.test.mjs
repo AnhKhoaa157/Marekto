@@ -136,9 +136,11 @@ test("email log SQL is parameterized and tenant-scoped", () => {
   assert.match(SELECT_CAMPAIGN_DELIVERY_SQL, /ai_context/);
   assert.match(selection.text, /log\.campaign_id = \$2/);
   assert.match(selection.text, /LEFT JOIN "Contacts"/);
+  assert.match(selection.text, /ORDER BY log\.sent_at DESC, log\.id DESC/);
   assert.match(selection.text, /LIMIT \$3/);
   assert.deepEqual(selection.params, [WORKSPACE_ID, CAMPAIGN_ID, 50]);
-  assert.match(cursorSelection.text, /log\.id < \$3/);
+  assert.match(cursorSelection.text, /cursor_log\.id = \$3/);
+  assert.match(cursorSelection.text, /\(log\.sent_at, log\.id\) </);
   assert.match(cursorSelection.text, /LIMIT \$4/);
   assert.deepEqual(cursorSelection.params, [WORKSPACE_ID, CAMPAIGN_ID, EMAIL_LOG_ID, 50]);
 });

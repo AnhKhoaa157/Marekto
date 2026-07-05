@@ -1,3 +1,5 @@
+import { isUuid } from "./identifiers.ts";
+
 const CONTACT_FILTER_COLUMNS = new Set([
   "email",
   "first_name",
@@ -136,8 +138,7 @@ export function buildContactSelection(
     text:
       'SELECT id, email, first_name, last_name, properties FROM "Contacts" WHERE ' +
       conditions.join(" AND ") +
-      " ORDER BY id ASC",
+      " ORDER BY created_at ASC, id ASC",
     params,
   };
 }
-import { isUuid } from "./identifiers.ts";
