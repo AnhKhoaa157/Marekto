@@ -1,4 +1,7 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+)
 
 
 class HealthResponse(BaseModel):
@@ -8,4 +11,3 @@ class HealthResponse(BaseModel):
     service: str
     version: str
     ready: bool
-

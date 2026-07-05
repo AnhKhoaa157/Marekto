@@ -1,6 +1,10 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+)
 
 
 SegmentDimension = Literal["city", "tag", "lead_score_band"]
@@ -56,4 +60,3 @@ class CampaignAnalyticsResponse(BaseModel):
     segments: list[SegmentInsight]
     high_failure_segments: list[SegmentInsight]
     recommendations: list[CampaignRecommendation]
-

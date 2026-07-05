@@ -1,4 +1,8 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+)
 
 
 class LeadScoreRequest(BaseModel):
@@ -27,4 +31,3 @@ class LeadScoreResponse(BaseModel):
     labels: list[str]
     factors: list[LeadScoreFactor]
     model_version: str
-
