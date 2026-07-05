@@ -50,6 +50,10 @@ function roleClassName(role: string): string {
     : "border-zinc-700 bg-zinc-800 text-zinc-300";
 }
 
+function formatSystemRole(role: string): string {
+  return role === "admin" ? "Admin" : "User";
+}
+
 export default async function AdminUsersPage({ searchParams }: PageProps) {
   const state = await getAdminSessionState();
 
@@ -128,7 +132,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                 <thead className="border-b border-zinc-800 text-xs font-medium uppercase tracking-wide text-zinc-500">
                   <tr>
                     <th className="py-3 pr-4">Email</th>
-                    <th className="py-3 pr-4">Role</th>
+                    <th className="py-3 pr-4">System role</th>
                     <th className="py-3 pr-4">Workspaces</th>
                     <th className="py-3">Created</th>
                   </tr>
@@ -146,7 +150,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                         <span
                           className={`inline-flex rounded-md border px-2 py-1 text-xs font-medium ${roleClassName(user.role)}`}
                         >
-                          {user.role}
+                          {formatSystemRole(user.role)}
                         </span>
                       </td>
                       <td className="py-4 pr-4 tabular-nums">

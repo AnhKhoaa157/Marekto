@@ -1,6 +1,7 @@
 import { getDbClient } from "@/lib/db";
 
-const OWNER_ROLE = "owner";
+const ACCOUNT_ROLE = "user";
+const WORKSPACE_OWNER_ROLE = "owner";
 
 const INSERT_WORKSPACE_SQL =
   'INSERT INTO "Workspaces" (name) VALUES ($1) RETURNING id';
@@ -26,7 +27,7 @@ export type VerifiedRegistration = {
 };
 
 /**
- * Provision a workspace + owner user + membership inside a single transaction.
+ * Provision a workspace + user account + owner membership inside a single transaction.
  * This runs before tenant context exists, so it intentionally uses a raw pooled
  * client and only touches non-RLS bootstrap tables.
  */
@@ -55,7 +56,7 @@ export async function runRegistrationTransaction(
     const userResult = await client.query<{ id: number }>(INSERT_USER_SQL, [
       registration.email,
       registration.passwordHash,
-      OWNER_ROLE,
+      ACCOUNT_ROLE,
     ]);
     const newUserId = userResult.rows[0].id;
 
@@ -63,7 +64,7 @@ export async function runRegistrationTransaction(
     await client.query(INSERT_MEMBERSHIP_SQL, [
       newWorkspaceId,
       newUserId,
-      OWNER_ROLE,
+      WORKSPACE_OWNER_ROLE,
     ]);
 
     await client.query("COMMIT");

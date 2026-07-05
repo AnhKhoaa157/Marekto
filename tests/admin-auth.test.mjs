@@ -29,7 +29,7 @@ test("authenticated session with no matching user row is 401", () => {
 test("authenticated non-admin user is forbidden (403)", () => {
   const result = resolveAdminAuthorization(
     { userId: 7, workspaceId: 3 },
-    { id: 7, email: "owner@example.com", role: "owner" },
+    { id: 7, email: "user@example.com", role: "user" },
   );
 
   assert.deepEqual(result, {

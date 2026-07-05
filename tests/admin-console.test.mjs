@@ -81,7 +81,7 @@ test("toAdminUserSummary exposes safe fields only and never password_hash", () =
   const summary = toAdminUserSummary({
     id: 2,
     email: "user@example.com",
-    role: "owner",
+    role: "user",
     created_at: "2026-01-01T00:00:00.000Z",
     membership_count: 1,
     // A stray secret column must never survive mapping.
