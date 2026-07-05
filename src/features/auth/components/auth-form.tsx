@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 
-type AuthMode = "login" | "register";
+type AuthMode = "login" | "register" | "admin-login";
 
 type AuthFormProps = {
   mode: AuthMode;
@@ -142,27 +142,36 @@ export function AuthForm({ mode }: Readonly<AuthFormProps>) {
     };
   }, []);
 
+  const isAdminLogin = mode === "admin-login";
   const isRegister = mode === "register";
   const isVerifyingRegistration = isRegister && pendingRegistrationEmail !== null;
   const title = isVerifyingRegistration
     ? "Verify your email"
     : isRegister
       ? "Create your workspace"
+      : isAdminLogin
+        ? "Admin sign in"
       : "Sign in to Marekto";
   const description = isRegister
     ? isVerifyingRegistration
       ? "Enter the 6-digit code sent to your email to finish creating the account."
       : "Start with a real tenant workspace and owner account."
+    : isAdminLogin
+      ? "Use an administrator account to access the admin console."
     : "Use your existing account to load live tenant data.";
   const submitLabel = isVerifyingRegistration
     ? "Verify and create account"
     : isRegister
       ? "Send verification code"
+      : isAdminLogin
+        ? "Sign in as admin"
       : "Sign in";
   const pendingLabel = isVerifyingRegistration
     ? "Verifying code..."
     : isRegister
       ? "Sending code..."
+      : isAdminLogin
+        ? "Signing in to admin..."
       : "Signing in...";
   const feedbackId = `${mode}-auth-feedback`;
   const verificationExpiryMinutes =
@@ -201,6 +210,8 @@ export function AuthForm({ mode }: Readonly<AuthFormProps>) {
       ? "/api/auth/register/verify"
       : isRegister
         ? "/api/auth/register"
+        : isAdminLogin
+          ? "/api/admin/auth/login"
         : "/api/auth/login";
 
     try {
@@ -232,7 +243,7 @@ export function AuthForm({ mode }: Readonly<AuthFormProps>) {
       }
 
       setIsRedirecting(true);
-      router.push("/dashboard");
+      router.push(isAdminLogin ? "/admin" : "/dashboard");
       router.refresh();
     } catch (submitError) {
       setError(
@@ -255,7 +266,7 @@ export function AuthForm({ mode }: Readonly<AuthFormProps>) {
     >
       <div className="relative z-10" style={{ transform: "translateZ(30px)" }}>
         <p className="text-xs font-semibold uppercase tracking-wider text-indigo-400">
-          Tenant access
+          {isAdminLogin ? "Admin access" : "Tenant access"}
         </p>
         <h1 className="mt-3 text-3xl font-bold tracking-tight text-white">
           {title}
@@ -490,16 +501,37 @@ export function AuthForm({ mode }: Readonly<AuthFormProps>) {
               Sign in
             </Link>
           </p>
-        ) : (
+        ) : isAdminLogin ? (
           <p>
-            Need a workspace?{" "}
+            Need workspace access?{" "}
             <Link
               className="font-medium text-indigo-300 outline-none transition-colors hover:text-indigo-200 focus-visible:ring-2 focus-visible:ring-indigo-400"
-              href="/register"
+              href="/login"
             >
-              Create an account
+              Sign in as user
             </Link>
           </p>
+        ) : (
+          <div className="space-y-2">
+            <p>
+              Need a workspace?{" "}
+              <Link
+                className="font-medium text-indigo-300 outline-none transition-colors hover:text-indigo-200 focus-visible:ring-2 focus-visible:ring-indigo-400"
+                href="/register"
+              >
+                Create an account
+              </Link>
+            </p>
+            <p>
+              Administrator?{" "}
+              <Link
+                className="font-medium text-indigo-300 outline-none transition-colors hover:text-indigo-200 focus-visible:ring-2 focus-visible:ring-indigo-400"
+                href="/admin/login"
+              >
+                Use admin login
+              </Link>
+            </p>
+          </div>
         )}
       </div>
     </section>

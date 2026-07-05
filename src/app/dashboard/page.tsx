@@ -7,8 +7,7 @@ import type {
   RecentDeliveryFailureRow,
   ReadyDashboardData,
 } from "@/lib/dashboard";
-import { isAdminUserId } from "@/lib/admin-session";
-import { getServerAuthSession } from "@/lib/server-auth";
+import { getServerUserSession } from "@/lib/server-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +54,7 @@ function parseSearchQuery(value: string | string[] | undefined): string {
 }
 
 async function getDashboardData(searchQuery: string): Promise<DashboardData> {
-  const payload = await getServerAuthSession();
+  const payload = await getServerUserSession();
 
   if (!payload) {
     return {
@@ -693,16 +692,9 @@ export default async function DashboardPage({ searchParams }: DashboardProps) {
   const data = await getDashboardData(searchQuery);
   const hasSession = data.status === "ready";
 
-  // Surface the admin entry point in navigation only for real administrators.
-  const session = hasSession ? await getServerAuthSession() : null;
-  const adminLinkVisible = session
-    ? await isAdminUserId(session.userId)
-    : false;
-
   return (
     <AppShell
       activeRoute="/dashboard"
-      adminLinkVisible={adminLinkVisible}
       authenticated={hasSession}
       eyebrow="Marketing command center"
       title="Dashboard overview"
