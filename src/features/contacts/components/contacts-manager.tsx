@@ -88,6 +88,49 @@ function parseContactProperties(value: FormDataEntryValue | null): Record<string
   return parsed;
 }
 
+// Keys written by the server-side data-intelligence enrichment contract.
+// They get dedicated presentation below instead of generic property chips.
+const INTELLIGENCE_PROPERTY_KEYS = new Set([
+  "city",
+  "tags",
+  "lead_score",
+  "lead_score_labels",
+  "lead_score_factors",
+  "lead_score_version",
+  "normalization_warnings",
+  "data_intelligence_status",
+]);
+
+function getLeadScore(contact: ContactRow): number | null {
+  if (contact.properties.data_intelligence_status !== "scored") {
+    return null;
+  }
+
+  const value = contact.properties.lead_score;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function getStringListProperty(contact: ContactRow, key: string): string[] {
+  const value = contact.properties[key];
+
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function getCity(contact: ContactRow): string | null {
+  const value = contact.properties.city;
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function getGenericProperties(contact: ContactRow): Array<[string, unknown]> {
+  return Object.entries(contact.properties).filter(
+    ([key]) => !INTELLIGENCE_PROPERTY_KEYS.has(key),
+  );
+}
+
 function formatPropertyValue(value: unknown): string {
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
     return String(value);
@@ -266,19 +309,45 @@ export function ContactsManager() {
                     <th className="py-3 pr-4">Name</th>
                     <th className="py-3 pr-4">Email</th>
                     <th className="py-3 pr-4">Phone</th>
+                    <th className="py-3 pr-4">Lead score</th>
                     <th className="py-3">Created</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800">
-                  {contacts.map((contact) => (
-                    <tr key={contact.id}>
-                      <td className="py-4 pr-4 font-medium text-zinc-100">
-                        <p>{getContactName(contact)}</p>
-                        {Object.keys(contact.properties).length > 0 ? (
-                          <div className="mt-2 flex max-w-sm flex-wrap gap-1.5">
-                            {Object.entries(contact.properties)
-                              .slice(0, 3)
-                              .map(([key, value]) => (
+                  {contacts.map((contact) => {
+                    const city = getCity(contact);
+                    const tags = getStringListProperty(contact, "tags");
+                    const warnings = getStringListProperty(
+                      contact,
+                      "normalization_warnings",
+                    );
+                    const leadScore = getLeadScore(contact);
+                    const leadScoreLabels = getStringListProperty(
+                      contact,
+                      "lead_score_labels",
+                    );
+                    const genericProperties = getGenericProperties(contact);
+
+                    return (
+                      <tr key={contact.id}>
+                        <td className="py-4 pr-4 font-medium text-zinc-100">
+                          <p>{getContactName(contact)}</p>
+                          {city || tags.length > 0 || genericProperties.length > 0 ? (
+                            <div className="mt-2 flex max-w-sm flex-wrap gap-1.5">
+                              {city ? (
+                                <span className="max-w-full truncate rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs font-normal text-zinc-400">
+                                  City: {city}
+                                </span>
+                              ) : null}
+                              {tags.slice(0, 4).map((tag) => (
+                                <span
+                                  className="max-w-full truncate rounded-md border border-indigo-900 bg-indigo-950/40 px-2 py-1 text-xs font-normal text-indigo-300"
+                                  key={tag}
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                              {genericProperties.slice(0, 3).map(([key, value]) => (
                                 <span
                                   className="max-w-full truncate rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs font-normal text-zinc-400"
                                   key={key}
@@ -287,18 +356,41 @@ export function ContactsManager() {
                                   {key}: {formatPropertyValue(value)}
                                 </span>
                               ))}
-                          </div>
-                        ) : null}
-                      </td>
-                      <td className="py-4 pr-4 text-zinc-300">{contact.email}</td>
-                      <td className="py-4 pr-4 text-zinc-400">
-                        {contact.phone ?? "Not provided"}
-                      </td>
-                      <td className="py-4 text-zinc-500">
-                        {formatApiDate(contact.created_at)}
-                      </td>
-                    </tr>
-                  ))}
+                            </div>
+                          ) : null}
+                          {warnings.length > 0 ? (
+                            <p
+                              className="mt-2 max-w-sm text-xs font-normal text-amber-300"
+                              title={warnings.join(", ")}
+                            >
+                              Normalization: {warnings.join(", ")}
+                            </p>
+                          ) : null}
+                        </td>
+                        <td className="py-4 pr-4 text-zinc-300">{contact.email}</td>
+                        <td className="py-4 pr-4 text-zinc-400">
+                          {contact.phone ?? "Not provided"}
+                        </td>
+                        <td className="py-4 pr-4">
+                          {leadScore !== null ? (
+                            <div>
+                              <p className="font-medium text-zinc-100">{leadScore}</p>
+                              {leadScoreLabels.length > 0 ? (
+                                <p className="mt-0.5 text-xs text-zinc-500">
+                                  {leadScoreLabels.join(", ")}
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <span className="text-zinc-600">Not scored</span>
+                          )}
+                        </td>
+                        <td className="py-4 text-zinc-500">
+                          {formatApiDate(contact.created_at)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

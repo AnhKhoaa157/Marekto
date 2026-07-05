@@ -1,5 +1,6 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
 
+import { enrichContactRecord } from "@/lib/data-intelligence/contact-intelligence";
 import { initializeDatabase, withWorkspace } from "@/lib/db";
 import { getWorkspaceIdFromHeaders } from "@/lib/workspace";
 
@@ -123,7 +124,12 @@ export async function POST(request: NextRequest) {
 
     const workspaceId = getWorkspaceIdFromHeaders(request.headers);
     const body = (await request.json()) as CreateContactBody;
-    const contact = parseCreateContactBody(body);
+
+    // Enrichment happens before the workspace transaction so a slow or down
+    // data-intelligence service never holds a database connection. It never
+    // throws: on failure the contact is saved unchanged with
+    // data_intelligence_status set to "unavailable".
+    const contact = await enrichContactRecord(parseCreateContactBody(body));
 
     const createdContact = await withWorkspace(workspaceId, async (client) => {
       const result = await client.query<ContactRow>(INSERT_CONTACT_SQL, [
