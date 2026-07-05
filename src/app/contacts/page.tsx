@@ -1,6 +1,6 @@
 import { AppShell } from "@/components/layout/app-shell";
 import { ContactsManager } from "@/features/contacts/components/contacts-manager";
-import { requireServerAuthSession } from "@/lib/server-auth";
+import { requireServerUserSession } from "@/lib/server-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +10,7 @@ export const metadata = {
 };
 
 export default async function ContactsPage() {
-  await requireServerAuthSession();
+  await requireServerUserSession();
 
   return (
     <AppShell

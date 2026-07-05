@@ -1,6 +1,6 @@
 import { AppShell } from "@/components/layout/app-shell";
 import { ProfileManager } from "@/features/profile/components/profile-manager";
-import { requireServerAuthSession } from "@/lib/server-auth";
+import { requireServerUserSession } from "@/lib/server-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +10,7 @@ export const metadata = {
 };
 
 export default async function ProfilePage() {
-  await requireServerAuthSession();
+  await requireServerUserSession();
 
   return (
     <AppShell

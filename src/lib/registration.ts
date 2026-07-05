@@ -1,5 +1,3 @@
-import { randomBytes, scryptSync } from "node:crypto";
-
 import { getDbClient } from "@/lib/db";
 
 const OWNER_ROLE = "owner";
@@ -26,12 +24,6 @@ export type VerifiedRegistration = {
   passwordHash: string;
   workspaceName: string;
 };
-
-export function hashPassword(password: string): string {
-  const salt = randomBytes(16);
-  const derivedKey = scryptSync(password, salt, 64);
-  return `${salt.toString("hex")}:${derivedKey.toString("hex")}`;
-}
 
 /**
  * Provision a workspace + owner user + membership inside a single transaction.

@@ -6,6 +6,8 @@
   type QueryResultRow,
 } from "pg";
 
+import { hashPassword } from "./password.ts";
+
 // Single source of truth for the database connection. We deliberately rely on
 // DATABASE_URL only (not the individual DB_HOST/DB_PORT/... vars) so the app and
 // any external tooling (DBeaver, migrations) cannot drift apart.
@@ -13,11 +15,23 @@ const REQUIRED_ENV_VARS = ["DATABASE_URL"] as const;
 const INITIALIZATION_TIMEOUT_MS = 60_000;
 const SLOW_QUERY_THRESHOLD_MS = 1_000;
 const MIGRATION_VERSION = "v11_admin_audit_logs";
+const DEFAULT_ADMIN_EMAIL = "Admin@marekto.com";
+const DEFAULT_ADMIN_PASSWORD = "123456";
+const DEFAULT_ADMIN_ROLE = "admin";
+const DEFAULT_ADMIN_WORKSPACE_NAME = "Marekto Admin";
 
 type SafeDatabaseConfig = {
   source: "DATABASE_URL";
   connectionString: string;
   ssl: string;
+};
+
+type IdRow = {
+  id: number;
+};
+
+type WorkspaceIdRow = {
+  workspace_id: number;
 };
 
 /**
@@ -784,6 +798,78 @@ async function executeQuery<T extends QueryResultRow = QueryResultRow>(
   }
 }
 
+async function seedDefaultAdmin(client: PoolClient): Promise<void> {
+  const existingAdmin = await executeQuery<IdRow>(
+    client,
+    'SELECT id FROM "Users" WHERE role = $1 LIMIT 1',
+    [DEFAULT_ADMIN_ROLE],
+  );
+
+  if (existingAdmin.rows[0]) {
+    return;
+  }
+
+  const existingDefaultUser = await executeQuery<IdRow>(
+    client,
+    'SELECT id FROM "Users" WHERE LOWER(email) = LOWER($1) LIMIT 1',
+    [DEFAULT_ADMIN_EMAIL],
+  );
+  const passwordHash = hashPassword(DEFAULT_ADMIN_PASSWORD);
+  let adminUserId = existingDefaultUser.rows[0]?.id ?? null;
+
+  if (adminUserId) {
+    await executeQuery(
+      client,
+      'UPDATE "Users" SET email = $1, password_hash = $2, role = $3 WHERE id = $4',
+      [DEFAULT_ADMIN_EMAIL, passwordHash, DEFAULT_ADMIN_ROLE, adminUserId],
+    );
+  } else {
+    const userResult = await executeQuery<IdRow>(
+      client,
+      'INSERT INTO "Users" (email, password_hash, role) VALUES ($1, $2, $3) RETURNING id',
+      [DEFAULT_ADMIN_EMAIL, passwordHash, DEFAULT_ADMIN_ROLE],
+    );
+    adminUserId = userResult.rows[0].id;
+  }
+
+  const membershipResult = await executeQuery<WorkspaceIdRow>(
+    client,
+    'SELECT workspace_id FROM "Workspace_members" WHERE user_id = $1 ORDER BY joined_at ASC LIMIT 1',
+    [adminUserId],
+  );
+  let workspaceId = membershipResult.rows[0]?.workspace_id ?? null;
+
+  if (!workspaceId) {
+    const ownedWorkspaceResult = await executeQuery<IdRow>(
+      client,
+      'SELECT id FROM "Workspaces" WHERE owner_id = $1 ORDER BY id ASC LIMIT 1',
+      [adminUserId],
+    );
+    workspaceId = ownedWorkspaceResult.rows[0]?.id ?? null;
+  }
+
+  if (!workspaceId) {
+    const workspaceResult = await executeQuery<IdRow>(
+      client,
+      'INSERT INTO "Workspaces" (name, owner_id) VALUES ($1, $2) RETURNING id',
+      [DEFAULT_ADMIN_WORKSPACE_NAME, adminUserId],
+    );
+    workspaceId = workspaceResult.rows[0].id;
+  } else {
+    await executeQuery(
+      client,
+      'UPDATE "Workspaces" SET owner_id = COALESCE(owner_id, $1) WHERE id = $2',
+      [adminUserId, workspaceId],
+    );
+  }
+
+  await executeQuery(
+    client,
+    'INSERT INTO "Workspace_members" (workspace_id, user_id, role) VALUES ($1, $2, $3) ON CONFLICT (workspace_id, user_id) DO UPDATE SET role = EXCLUDED.role',
+    [workspaceId, adminUserId, DEFAULT_ADMIN_ROLE],
+  );
+}
+
 export async function initializeDatabase(): Promise<void> {
   registerShutdownHandler();
 
@@ -816,6 +902,7 @@ export async function initializeDatabase(): Promise<void> {
         await executeQuery(client, "SELECT 1");
         await executeQuery(client, "BEGIN");
         await executeQuery(client, schemaSql);
+        await seedDefaultAdmin(client);
         await executeQuery(client, "COMMIT");
         isInitialized = true;
       } catch (error) {

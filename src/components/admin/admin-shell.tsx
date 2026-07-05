@@ -61,15 +61,6 @@ export function AdminShell({
               <AdminNavLink href={item.href} key={item.href} label={item.label} />
             ))}
           </nav>
-
-          <div className="mt-6 border-t border-zinc-800 pt-4">
-            <Link
-              className="inline-flex items-center gap-2 rounded-md border border-zinc-800 px-3 py-2 text-sm font-medium text-zinc-300 outline-none transition-colors hover:bg-zinc-900 hover:text-zinc-50 focus-visible:ring-2 focus-visible:ring-indigo-400"
-              href="/dashboard"
-            >
-              ← Back to workspace
-            </Link>
-          </div>
         </aside>
 
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">

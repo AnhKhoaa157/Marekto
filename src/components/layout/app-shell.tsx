@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { SignOutButton } from "@/features/auth/components/sign-out-button";
 import { NavLink } from "@/components/layout/nav-link";
+import { RoutePrefetcher } from "@/components/layout/route-prefetcher";
 
 export type AppRoute =
   | "/dashboard"
@@ -15,7 +16,6 @@ export type AppRoute =
 
 type AppShellProps = {
   activeRoute: AppRoute;
-  adminLinkVisible?: boolean;
   authenticated: boolean;
   children: ReactNode;
   eyebrow: string;
@@ -34,7 +34,6 @@ const navigationItems: ReadonlyArray<{ href: AppRoute; label: string }> = [
 ];
 
 export function AppShell({
-  adminLinkVisible = false,
   authenticated,
   children,
   eyebrow,
@@ -45,6 +44,10 @@ export function AppShell({
 
   return (
     <main className="h-dvh overflow-hidden bg-zinc-950 text-zinc-50">
+      <RoutePrefetcher
+        disabled={!authenticated}
+        routes={navigationItems.map((item) => item.href)}
+      />
       <div className="flex h-full min-h-0 flex-col lg:flex-row">
         <aside className="marekto-scrollbar shrink-0 overflow-y-auto overscroll-contain border-b border-zinc-800 bg-zinc-950 px-4 py-4 lg:h-full lg:w-64 lg:border-b-0 lg:border-r lg:px-6 lg:py-6">
           <div className="flex items-center justify-between gap-4 lg:block">
@@ -84,15 +87,6 @@ export function AppShell({
               <span>Automation</span>
               <span className="text-xs font-normal">Unavailable</span>
             </div>
-            {adminLinkVisible ? (
-              <Link
-                className="flex items-center justify-between gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-200 outline-none transition-colors hover:bg-amber-500/20 focus-visible:ring-2 focus-visible:ring-amber-400"
-                href="/admin"
-              >
-                <span>Admin console</span>
-                <span className="text-xs font-normal">Admin</span>
-              </Link>
-            ) : null}
           </nav>
         </aside>
 

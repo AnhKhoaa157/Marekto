@@ -8,7 +8,8 @@ import {
 import { initializeDatabase, query } from "@/lib/db";
 import { sendRegistrationOtpEmail } from "@/lib/mail/auth";
 import { sanitizeMailError } from "@/lib/mail/nodemailer";
-import { EMAIL_TAKEN_ERROR, hashPassword } from "@/lib/registration";
+import { hashPassword } from "@/lib/password";
+import { EMAIL_TAKEN_ERROR } from "@/lib/registration";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

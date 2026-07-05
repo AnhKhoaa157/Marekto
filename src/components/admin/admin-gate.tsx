@@ -24,8 +24,8 @@ const GATE_COPY: Record<
     description:
       "The admin console requires an authenticated session. Sign in with an administrator account to continue.",
     tone: "border-blue-500/30 bg-blue-500/10 text-blue-200",
-    href: "/login",
-    action: "Go to sign in",
+    href: "/admin/login",
+    action: "Go to admin sign in",
   },
   forbidden: {
     eyebrow: "403 · Administrator access required",
