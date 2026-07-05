@@ -63,6 +63,7 @@ yarn-error.log*
 .env.*.local
 .env*
 !.env.example
+docker/env.local
 
 # local caches
 /.cache/

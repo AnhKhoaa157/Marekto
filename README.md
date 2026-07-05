@@ -221,6 +221,49 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000). Interactive API documentation is available at [http://localhost:3000/api-docs](http://localhost:3000/api-docs).
 
+### Docker local stack
+
+The repository includes a Docker Compose setup for local development:
+
+- `web`: Next.js app on port `3000`
+- `postgres`: PostgreSQL 16 on port `5432`
+- `data-intelligence`: internal FastAPI service on port `8080`
+
+Start the stack:
+
+```bash
+docker compose up --build
+```
+
+Then open [http://localhost:3000](http://localhost:3000). The app initializes the database schema and default admin account when it first touches the database.
+
+Docker uses safe local defaults from `docker/env.example`. To customize secrets or provider credentials without editing the committed example, copy it to a local file and point Compose at it:
+
+```bash
+cp docker/env.example docker/env.local
+MAREKTO_DOCKER_ENV_FILE=./docker/env.local docker compose up --build
+```
+
+PowerShell equivalent:
+
+```powershell
+Copy-Item docker/env.example docker/env.local
+$env:MAREKTO_DOCKER_ENV_FILE = "./docker/env.local"
+docker compose up --build
+```
+
+Stop the stack:
+
+```bash
+docker compose down
+```
+
+Remove the local PostgreSQL data volume when you need a clean database:
+
+```bash
+docker compose down -v
+```
+
 ## Product surfaces
 
 | Route | Purpose |
