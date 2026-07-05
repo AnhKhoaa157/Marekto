@@ -6,6 +6,7 @@ import {
   parseCampaignTargetFilters,
   type CampaignTargetFilters,
 } from "./campaign-filters.ts";
+import { isUuid } from "./identifiers.ts";
 
 /**
  * Pure mapping helpers that turn a reviewed campaign-builder package into the
@@ -37,7 +38,7 @@ export type TemplateDraftRequest = {
 
 export type CampaignDraftInput = {
   name: string;
-  templateId: number | null;
+  templateId: string | null;
   useAllContacts: boolean;
   filtersValid: boolean;
   targetFilters: CampaignTargetFilters;
@@ -48,7 +49,7 @@ export type CampaignDraftInput = {
 export type CampaignDraftRequest = {
   name: string;
   status: "draft";
-  template_id: number | null;
+  template_id: string | null;
   target_filters: CampaignTargetFilters;
   ai_personalization_enabled: boolean;
   ai_context: CampaignAiContext;
@@ -100,7 +101,7 @@ export function buildCampaignDraftRequest(
 
   if (
     input.templateId !== null &&
-    (!Number.isInteger(input.templateId) || input.templateId <= 0)
+    !isUuid(input.templateId)
   ) {
     throw new CampaignBuilderDraftError("Invalid template id");
   }

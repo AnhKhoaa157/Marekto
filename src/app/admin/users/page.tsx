@@ -24,6 +24,7 @@ import {
 } from "@/lib/admin-data";
 import { getAdminSessionState } from "@/lib/admin-session";
 import type { AdminUserSummary } from "@/lib/admin-console";
+import { formatEntityCode } from "@/lib/identifiers";
 import { sanitizeWorkerLogReason } from "@/lib/worker-log";
 
 export const dynamic = "force-dynamic";
@@ -144,7 +145,9 @@ export default async function AdminUsersPage({ searchParams }: PageProps) {
                         <span className="font-medium text-zinc-50">
                           {user.email}
                         </span>
-                        <p className="text-xs text-zinc-500">ID {user.id}</p>
+                        <p className="text-xs text-zinc-500">
+                          {formatEntityCode("US", user.id)}
+                        </p>
                       </td>
                       <td className="py-4 pr-4">
                         <span

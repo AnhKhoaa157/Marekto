@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 
 import { ApiRequestError, isRecord, requestApi } from "@/lib/client-api";
+import { formatEntityCode } from "@/lib/identifiers";
 import {
   CAMPAIGN_AI_CONTEXT_LIMITS,
   parseCampaignAiContext,
@@ -48,7 +49,7 @@ type BuilderResult = {
   warnings: string[];
 };
 
-type SavedResource = { id: number; name: string };
+type SavedResource = { id: string; name: string };
 
 const BUILDER_FIELDS: ReadonlyArray<{
   key: BuilderTextFieldKey;
@@ -184,7 +185,7 @@ export function parseBuilderResult(value: unknown): BuilderResult {
 }
 
 function parseSavedResource(value: unknown): SavedResource {
-  if (!isRecord(value) || typeof value.id !== "number" || typeof value.name !== "string") {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.name !== "string") {
     throw new Error("The save response has an invalid shape.");
   }
 
@@ -406,7 +407,7 @@ export function CampaignBuilderManager() {
     );
   }
 
-  async function createCampaign(templateId: number | null): Promise<SavedResource> {
+  async function createCampaign(templateId: string | null): Promise<SavedResource> {
     const body = buildCampaignDraftRequest({
       name: campaignName,
       templateId,
@@ -966,7 +967,7 @@ export function CampaignBuilderManager() {
               >
                 <p className="font-medium">Template draft saved</p>
                 <p className="mt-1 text-emerald-100/90">
-                  #{savedTemplate.id} · {savedTemplate.name}
+                  {formatEntityCode("TP", savedTemplate.id)} · {savedTemplate.name}
                 </p>
                 <Link
                   className="mt-2 inline-flex text-sm font-medium underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
@@ -984,7 +985,7 @@ export function CampaignBuilderManager() {
               >
                 <p className="font-medium">Campaign draft saved</p>
                 <p className="mt-1 text-emerald-100/90">
-                  #{savedCampaign.id} · {savedCampaign.name}
+                  {formatEntityCode("CP", savedCampaign.id)} · {savedCampaign.name}
                 </p>
                 <div className="mt-2 flex flex-wrap gap-4">
                   <Link

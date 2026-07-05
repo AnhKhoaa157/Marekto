@@ -15,6 +15,7 @@ import {
   isRecord,
   requestApi,
 } from "@/lib/client-api";
+import { formatEntityCode } from "@/lib/identifiers";
 import {
   CAMPAIGN_AI_CONTEXT_LIMITS,
   parseCampaignAiContext,
@@ -33,9 +34,9 @@ type SchedulePreset =
   | "next-week-morning";
 
 type CampaignRow = {
-  id: number;
-  workspace_id: number;
-  template_id: number | null;
+  id: string;
+  workspace_id: string;
+  template_id: string | null;
   name: string;
   status: CampaignStatus;
   target_filters: Record<string, unknown>;
@@ -48,7 +49,7 @@ type CampaignRow = {
 };
 
 type TemplateOption = {
-  id: number;
+  id: string;
   name: string;
 };
 
@@ -124,9 +125,9 @@ function parseCampaignStatus(value: unknown): CampaignStatus {
 function parseCampaign(value: unknown): CampaignRow {
   if (
     !isRecord(value) ||
-    typeof value.id !== "number" ||
-    typeof value.workspace_id !== "number" ||
-    (value.template_id !== null && typeof value.template_id !== "number") ||
+    typeof value.id !== "string" ||
+    typeof value.workspace_id !== "string" ||
+    (value.template_id !== null && typeof value.template_id !== "string") ||
     typeof value.name !== "string" ||
     !isRecord(value.target_filters) ||
     typeof value.ai_personalization_enabled !== "boolean" ||
@@ -161,7 +162,7 @@ function parseCampaigns(value: unknown): CampaignRow[] {
 }
 
 function parseTemplateOption(value: unknown): TemplateOption {
-  if (!isRecord(value) || typeof value.id !== "number" || typeof value.name !== "string") {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.name !== "string") {
     throw new Error("The template response has an invalid shape.");
   }
 
@@ -377,8 +378,8 @@ export function CampaignsManager() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGeneratingAudience, setIsGeneratingAudience] = useState(false);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 
   const handleUnauthorized = useCallback(() => {
     router.push("/login");
@@ -625,7 +626,7 @@ export function CampaignsManager() {
           body: JSON.stringify({
             name: trimmedName,
             status: getCampaignStatus(deliveryPlan),
-            template_id: templateId ? Number(templateId) : null,
+            template_id: templateId || null,
             scheduled_at: scheduledAt,
             target_filters: filters,
             ai_personalization_enabled: aiPersonalizationEnabled,
@@ -687,7 +688,7 @@ export function CampaignsManager() {
     }
   }
 
-  function getTemplateName(id: number | null): string {
+  function getTemplateName(id: string | null): string {
     if (id === null) {
       return "No template";
     }
@@ -736,6 +737,9 @@ export function CampaignsManager() {
                     <tr key={campaign.id}>
                       <td className="py-4 pr-4">
                         <p className="font-medium text-zinc-100">{campaign.name}</p>
+                        <p className="mt-0.5 text-xs text-zinc-500">
+                          {formatEntityCode("CP", campaign.id)}
+                        </p>
                         <p className="mt-1 text-sm text-zinc-500">
                           {getTemplateName(campaign.template_id)}
                         </p>

@@ -16,6 +16,7 @@ import {
   toAdminUserSummary,
   toAdminWorkspaceSummary,
 } from "../src/lib/admin-console.ts";
+import { WORKSPACE_ID } from "./test-ids.mjs";
 
 test("parseAdminSearch trims and bounds length", () => {
   assert.equal(parseAdminSearch("  acme  "), "acme");
@@ -44,8 +45,8 @@ test("parseAdminDiagnosticsLimit clamps to the maximum", () => {
   assert.equal(parseAdminDiagnosticsLimit(null), 50);
 });
 
-test("parseWorkspaceIdParam rejects non-positive integers", () => {
-  assert.equal(parseWorkspaceIdParam("12"), 12);
+test("parseWorkspaceIdParam accepts only UUIDs", () => {
+  assert.equal(parseWorkspaceIdParam(WORKSPACE_ID), WORKSPACE_ID);
   assert.throws(() => parseWorkspaceIdParam("0"), /Invalid workspace id/);
   assert.throws(() => parseWorkspaceIdParam("-1"), /Invalid workspace id/);
   assert.throws(() => parseWorkspaceIdParam("abc"), /Invalid workspace id/);

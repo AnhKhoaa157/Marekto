@@ -14,10 +14,11 @@ import {
   isRecord,
   requestApi,
 } from "@/lib/client-api";
+import { formatEntityCode } from "@/lib/identifiers";
 
 type ListRow = {
-  id: number;
-  workspace_id: number;
+  id: string;
+  workspace_id: string;
   name: string;
   description: string | null;
   created_at: string;
@@ -26,8 +27,8 @@ type ListRow = {
 function parseList(value: unknown): ListRow {
   if (
     !isRecord(value) ||
-    typeof value.id !== "number" ||
-    typeof value.workspace_id !== "number" ||
+    typeof value.id !== "string" ||
+    typeof value.workspace_id !== "string" ||
     typeof value.name !== "string" ||
     (value.description !== null && typeof value.description !== "string") ||
     typeof value.created_at !== "string"
@@ -63,8 +64,8 @@ export function ListsManager() {
   const [success, setSuccess] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 
   const handleUnauthorized = useCallback(() => {
     router.push("/login");
@@ -250,6 +251,9 @@ export function ListsManager() {
                     <tr key={list.id}>
                       <td className="py-4 pr-4">
                         <p className="font-medium text-zinc-100">{list.name}</p>
+                        <p className="mt-0.5 text-xs text-zinc-500">
+                          {formatEntityCode("LS", list.id)}
+                        </p>
                         <p className="mt-1 text-sm text-zinc-500">
                           {list.description || "No description"}
                         </p>

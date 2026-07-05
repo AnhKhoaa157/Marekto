@@ -11,6 +11,7 @@ import {
   parseUserCampaignStatus,
 } from "@/lib/campaign-status";
 import { initializeDatabase, withWorkspace } from "@/lib/db";
+import { parseUuid } from "@/lib/identifiers";
 import { getWorkspaceIdFromHeaders } from "@/lib/workspace";
 
 export const runtime = "nodejs";
@@ -21,13 +22,13 @@ const SELECT_CAMPAIGNS_SQL =
 const INSERT_CAMPAIGN_SQL =
   'INSERT INTO "Campaigns" (workspace_id, template_id, name, status, target_filters, ai_personalization_enabled, ai_context, scheduled_at, run_at) ' +
   'SELECT $1, $2, $3, $4, $5::jsonb, $6, $7::jsonb, $8, $8 ' +
-  'WHERE $2::int IS NULL OR EXISTS (SELECT 1 FROM "Templates" WHERE id = $2 AND workspace_id = $1) ' +
+  'WHERE $2::uuid IS NULL OR EXISTS (SELECT 1 FROM "Templates" WHERE id = $2 AND workspace_id = $1) ' +
   'RETURNING id, workspace_id, template_id, name, status, target_filters, ai_personalization_enabled, ai_context, scheduled_at, run_at, created_at, updated_at';
 
 type CampaignRow = {
-  id: number;
-  workspace_id: number;
-  template_id: number | null;
+  id: string;
+  workspace_id: string;
+  template_id: string | null;
   name: string;
   status: string;
   target_filters: Record<string, unknown>;
@@ -49,18 +50,12 @@ type CreateCampaignBody = {
   scheduled_at?: unknown;
 };
 
-function parseOptionalTemplateId(value: unknown): number | null {
+function parseOptionalTemplateId(value: unknown): string | null {
   if (value === undefined || value === null) {
     return null;
   }
 
-  const templateId = Number(value);
-
-  if (!Number.isInteger(templateId) || templateId <= 0) {
-    throw new Error("Invalid template id");
-  }
-
-  return templateId;
+  return parseUuid(value, "Template id");
 }
 
 function parseScheduledAt(value: unknown): string | null {

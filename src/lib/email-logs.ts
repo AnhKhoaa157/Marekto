@@ -4,6 +4,7 @@ import {
   type CampaignAiContext,
 } from "./campaign-ai-context.ts";
 import { sanitizeWorkerLogReason } from "./worker-log.ts";
+import { isUuid, parseUuid } from "./identifiers.ts";
 
 export type { EmailPersonalizationSource } from "./campaign-worker.ts";
 
@@ -49,7 +50,7 @@ const SELECT_EMAIL_LOGS_BASE_SQL =
   "WHERE log.workspace_id = $1 AND log.campaign_id = $2";
 
 export type CampaignDeliveryRow = {
-  id: number;
+  id: string;
   name: string;
   status: string;
   failure_reason: string | null;
@@ -71,8 +72,8 @@ export type EmailLogSummaryRow = {
 };
 
 export type EmailLogListRow = {
-  id: number;
-  contact_id: number | null;
+  id: string;
+  contact_id: string | null;
   status: string;
   error_message: string | null;
   personalization_source: string | null;
@@ -84,7 +85,7 @@ export type EmailLogListRow = {
 };
 
 export type CampaignDeliveryCampaign = {
-  id: number;
+  id: string;
   name: string;
   status: string;
   failure_reason: string | null;
@@ -106,8 +107,8 @@ export type CampaignDeliverySummary = {
 };
 
 export type CampaignEmailLogItem = {
-  id: number;
-  contact_id: number | null;
+  id: string;
+  contact_id: string | null;
   recipient_email: string | null;
   recipient_first_name: string | null;
   recipient_last_name: string | null;
@@ -168,28 +169,23 @@ export function parseEmailLogLimit(value: string | null): number {
   return limit;
 }
 
-export function parseEmailLogCursor(value: string | null): number | null {
+export function parseEmailLogCursor(value: string | null): string | null {
   if (value === null) {
     return null;
   }
 
-  const cursor = Number(value);
-
-  if (!Number.isInteger(cursor) || cursor <= 0) {
-    throw new Error("cursor must be a positive integer");
-  }
-
-  return cursor;
+  return parseUuid(value, "cursor");
 }
 
 export function buildEmailLogSelection(
-  workspaceId: number,
-  campaignId: number,
+  workspaceId: string,
+  campaignId: string,
   limit: number,
-  cursor: number | null,
+  cursor: string | null,
 ): EmailLogSelection {
-  assertPositiveInteger("workspaceId", workspaceId);
-  assertPositiveInteger("campaignId", campaignId);
+  if (!isUuid(workspaceId) || !isUuid(campaignId)) {
+    throw new Error("workspaceId and campaignId must be UUIDs");
+  }
   assertPositiveInteger("limit", limit);
 
   if (limit > MAX_EMAIL_LOG_LIMIT) {
@@ -200,7 +196,7 @@ export function buildEmailLogSelection(
   let text = SELECT_EMAIL_LOGS_BASE_SQL;
 
   if (cursor !== null) {
-    assertPositiveInteger("cursor", cursor);
+    if (!isUuid(cursor)) throw new Error("cursor must be a UUID");
     params.push(cursor);
     text += " AND log.id < $" + params.length;
   }

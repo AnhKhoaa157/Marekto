@@ -58,13 +58,13 @@ const MARK_CAMPAIGN_SENT_SQL =
   "WHERE id = $2 AND workspace_id = $3 AND status = $4";
 
 type WorkspaceRow = {
-  workspace_id: number;
+  workspace_id: string;
 };
 
 type ClaimedCampaignRow = {
-  id: number;
-  workspace_id: number;
-  template_id: number | null;
+  id: string;
+  workspace_id: string;
+  template_id: string | null;
   name: string;
   target_filters: CampaignTargetFilters | null;
   ai_personalization_enabled: boolean;
@@ -72,7 +72,7 @@ type ClaimedCampaignRow = {
 };
 
 type ContactRow = {
-  id: number;
+  id: string;
   email: string;
   first_name: string | null;
   last_name: string | null;
@@ -80,7 +80,7 @@ type ContactRow = {
 };
 
 type TemplateRow = {
-  id: number;
+  id: string;
   body_html: string;
 };
 
@@ -90,7 +90,7 @@ type PreparedCampaign = {
 };
 
 type CampaignResult = {
-  campaign_id: number;
+  campaign_id: string;
   recipients: number;
   emails_sent: number;
   emails_failed: number;
@@ -99,7 +99,7 @@ type CampaignResult = {
 };
 
 type WorkspaceResult = {
-  workspace_id: number;
+  workspace_id: string;
   campaigns_processed: number;
   campaigns_failed: number;
   emails_sent: number;
@@ -108,7 +108,7 @@ type WorkspaceResult = {
 };
 
 async function claimNextCampaign(
-  workspaceId: number,
+  workspaceId: string,
 ): Promise<ClaimedCampaignRow | null> {
   return withWorkspace(workspaceId, async (client) => {
     const result = await client.query<ClaimedCampaignRow>(CLAIM_CAMPAIGN_SQL, [
@@ -123,8 +123,8 @@ async function claimNextCampaign(
 }
 
 async function markCampaignFailed(
-  workspaceId: number,
-  campaignId: number,
+  workspaceId: string,
+  campaignId: string,
   reason: string,
 ): Promise<void> {
   await withWorkspace(workspaceId, async (client) => {
@@ -139,8 +139,8 @@ async function markCampaignFailed(
 }
 
 async function markCampaignSent(
-  workspaceId: number,
-  campaignId: number,
+  workspaceId: string,
+  campaignId: string,
 ): Promise<void> {
   await withWorkspace(workspaceId, async (client) => {
     await client.query(MARK_CAMPAIGN_SENT_SQL, [
@@ -153,9 +153,9 @@ async function markCampaignSent(
 }
 
 async function recordEmailLog(
-  workspaceId: number,
-  campaignId: number,
-  contactId: number,
+  workspaceId: string,
+  campaignId: string,
+  contactId: string,
   status: "sent" | "failed",
   errorMessage: string | null,
   personalizationSource: EmailPersonalizationSource | null,
@@ -175,7 +175,7 @@ async function recordEmailLog(
 }
 
 async function prepareCampaignDelivery(
-  workspaceId: number,
+  workspaceId: string,
   campaign: ClaimedCampaignRow,
 ): Promise<PreparedCampaign> {
   return withWorkspace(workspaceId, async (client) => {
@@ -232,7 +232,7 @@ function createCampaignTransporter(): {
 }
 
 async function processClaimedCampaign(
-  workspaceId: number,
+  workspaceId: string,
   campaign: ClaimedCampaignRow,
 ): Promise<CampaignResult> {
   const preparedCampaign = await prepareCampaignDelivery(workspaceId, campaign);
@@ -445,7 +445,7 @@ async function processClaimedCampaign(
   };
 }
 
-async function processWorkspace(workspaceId: number): Promise<WorkspaceResult> {
+async function processWorkspace(workspaceId: string): Promise<WorkspaceResult> {
   const campaigns: CampaignResult[] = [];
 
   while (true) {

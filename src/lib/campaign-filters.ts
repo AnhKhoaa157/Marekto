@@ -83,10 +83,10 @@ export function parseCampaignTargetFilters(value: unknown): CampaignTargetFilter
 }
 
 export function buildContactSelection(
-  workspaceId: number,
+  workspaceId: string,
   targetFilters: CampaignTargetFilters,
 ): ContactSelection {
-  if (!Number.isInteger(workspaceId) || workspaceId <= 0) {
+  if (!isUuid(workspaceId)) {
     throw new Error("Invalid workspace id");
   }
 
@@ -140,3 +140,4 @@ export function buildContactSelection(
     params,
   };
 }
+import { isUuid } from "./identifiers.ts";

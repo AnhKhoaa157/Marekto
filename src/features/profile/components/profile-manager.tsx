@@ -13,9 +13,10 @@ import {
   isRecord,
   requestApi,
 } from "@/lib/client-api";
+import { formatEntityCode } from "@/lib/identifiers";
 
 type ProfileRow = {
-  id: number;
+  id: string;
   email: string;
   role: string;
   first_name: string | null;
@@ -45,7 +46,7 @@ function parseNullableString(value: unknown): string | null {
 function parseProfile(value: unknown): ProfileRow {
   if (
     !isRecord(value) ||
-    typeof value.id !== "number" ||
+    typeof value.id !== "string" ||
     typeof value.email !== "string" ||
     typeof value.role !== "string" ||
     typeof value.created_at !== "string"
@@ -305,6 +306,7 @@ export function ProfileManager() {
         ) : null}
         {!isLoading && !loadError && profile ? (
           <dl className="mt-4 space-y-4">
+            <ProfileMeta label="Account ID" value={formatEntityCode("US", profile.id)} />
             <ProfileMeta label="Display name" value={getDisplayName(profile)} />
             <ProfileMeta label="Role" value={profile.role} />
             <ProfileMeta

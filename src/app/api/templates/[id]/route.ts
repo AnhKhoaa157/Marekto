@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { initializeDatabase, withWorkspace } from "@/lib/db";
+import { parseUuid } from "@/lib/identifiers";
 import { getWorkspaceIdFromHeaders } from "@/lib/workspace";
 
 export const runtime = "nodejs";
@@ -21,8 +22,8 @@ type RouteParams = {
 };
 
 type TemplateRow = {
-  id: number;
-  workspace_id: number;
+  id: string;
+  workspace_id: string;
   name: string;
   body_html: string;
   body_json: Record<string, unknown>;
@@ -36,15 +37,9 @@ type UpdateTemplateBody = {
   body_json?: unknown;
 };
 
-async function getTemplateId({ params }: RouteParams): Promise<number> {
+async function getTemplateId({ params }: RouteParams): Promise<string> {
   const { id } = await params;
-  const templateId = Number(id);
-
-  if (!Number.isInteger(templateId) || templateId <= 0) {
-    throw new Error("Invalid template id");
-  }
-
-  return templateId;
+  return parseUuid(id, "Template id");
 }
 
 function parseUpdateBody(body: UpdateTemplateBody) {

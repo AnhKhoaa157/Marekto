@@ -20,7 +20,7 @@ const UPDATE_PROFILE_SQL =
   'UPDATE "Users" SET first_name = $1, last_name = $2, phone = $3 WHERE id = $4 RETURNING id, email, role, first_name, last_name, phone, created_at';
 
 type ProfileRow = {
-  id: number;
+  id: string;
   email: string;
   role: string;
   first_name: string | null;

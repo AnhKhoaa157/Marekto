@@ -8,6 +8,7 @@ import {
   resolveAdminAuthorization,
   SELECT_ADMIN_USER_SQL,
 } from "../src/lib/admin-auth.ts";
+import { USER_ID, WORKSPACE_ID } from "./test-ids.mjs";
 
 test("missing session is unauthenticated (401)", () => {
   const result = resolveAdminAuthorization(null, null);
@@ -20,7 +21,7 @@ test("missing session is unauthenticated (401)", () => {
 });
 
 test("authenticated session with no matching user row is 401", () => {
-  const result = resolveAdminAuthorization({ userId: 5, workspaceId: 2 }, null);
+  const result = resolveAdminAuthorization({ userId: USER_ID, workspaceId: WORKSPACE_ID }, null);
 
   assert.equal(result.ok, false);
   assert.equal(result.status, 401);
@@ -28,8 +29,8 @@ test("authenticated session with no matching user row is 401", () => {
 
 test("authenticated non-admin user is forbidden (403)", () => {
   const result = resolveAdminAuthorization(
-    { userId: 7, workspaceId: 3 },
-    { id: 7, email: "user@example.com", role: "user" },
+    { userId: USER_ID, workspaceId: WORKSPACE_ID },
+    { id: USER_ID, email: "user@example.com", role: "user" },
   );
 
   assert.deepEqual(result, {
@@ -41,26 +42,26 @@ test("authenticated non-admin user is forbidden (403)", () => {
 
 test("admin user is authorized and returns a sanitized identity", () => {
   const result = resolveAdminAuthorization(
-    { userId: 9, workspaceId: 4 },
-    { id: 9, email: "admin@example.com", role: ADMIN_ROLE },
+    { userId: USER_ID, workspaceId: WORKSPACE_ID },
+    { id: USER_ID, email: "admin@example.com", role: ADMIN_ROLE },
   );
 
   assert.equal(result.ok, true);
   if (result.ok) {
     assert.deepEqual(result.identity, {
-      userId: 9,
+      userId: USER_ID,
       email: "admin@example.com",
       role: "admin",
-      workspaceId: 4,
+      workspaceId: WORKSPACE_ID,
     });
   }
 });
 
 test("resolved admin identity never carries a password hash or extra fields", () => {
   const result = resolveAdminAuthorization(
-    { userId: 1, workspaceId: 1 },
+    { userId: USER_ID, workspaceId: WORKSPACE_ID },
     {
-      id: 1,
+      id: USER_ID,
       email: "admin@example.com",
       role: ADMIN_ROLE,
       // A caller passing a stray secret must not have it echoed back.

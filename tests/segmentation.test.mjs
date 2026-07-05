@@ -9,6 +9,7 @@ import {
   parseSegmentationPrompt,
   SegmentationUnavailableError,
 } from "../src/lib/ai/segmentation.ts";
+import { EMAIL_LOG_ID, WORKSPACE_ID } from "./test-ids.mjs";
 
 test("normalizes a valid audience description", () => {
   assert.equal(
@@ -122,7 +123,7 @@ test("rejects invalid provider output instead of creating a fake audience", asyn
 test("saves validated Gemini audience filters into the workspace cache", async () => {
   const writes = [];
   const result = await generateAudienceFiltersWithCache(
-    7,
+    WORKSPACE_ID,
     "VIP customers in HCM with lead score over 80",
     {
       generateJson: async () => ({
@@ -149,7 +150,7 @@ test("saves validated Gemini audience filters into the workspace cache", async (
   });
   assert.deepEqual(writes, [
     {
-      workspaceId: 7,
+      workspaceId: WORKSPACE_ID,
       feature: "segmentation",
       inputText: "VIP customers in HCM with lead score over 80",
       outputJson: {
@@ -166,7 +167,7 @@ test("saves validated Gemini audience filters into the workspace cache", async (
 test("uses exact-match cached segmentation when Gemini is unavailable", async () => {
   const reads = [];
   const result = await generateAudienceFiltersWithCache(
-    7,
+    WORKSPACE_ID,
     "VIP customers in HCM",
     {
       generateJson: async () => {
@@ -176,7 +177,7 @@ test("uses exact-match cached segmentation when Gemini is unavailable", async ()
         reads.push({ workspaceId, feature, inputText });
 
         return {
-          id: 1,
+          id: EMAIL_LOG_ID,
           workspaceId,
           feature,
           inputHash: "hash",
@@ -197,7 +198,7 @@ test("uses exact-match cached segmentation when Gemini is unavailable", async ()
   );
 
   assert.deepEqual(reads, [
-    { workspaceId: 7, feature: "segmentation", inputText: "VIP customers in HCM" },
+    { workspaceId: WORKSPACE_ID, feature: "segmentation", inputText: "VIP customers in HCM" },
   ]);
   assert.deepEqual(result, {
     targetFilters: { city: "HCM", tags_contains: "VIP" },
@@ -207,7 +208,7 @@ test("uses exact-match cached segmentation when Gemini is unavailable", async ()
 
 test("returns unavailable when Gemini fails and no exact cache exists", async () => {
   await assert.rejects(
-    generateAudienceFiltersWithCache(7, "VIP customers in HCM", {
+    generateAudienceFiltersWithCache(WORKSPACE_ID, "VIP customers in HCM", {
       generateJson: async () => {
         throw new GeminiProviderUnavailableError("GEMINI_API_KEY is required");
       },
@@ -224,7 +225,7 @@ test("does not fallback to cache when Gemini returns invalid filter JSON", async
   let readCacheCalled = false;
 
   await assert.rejects(
-    generateAudienceFiltersWithCache(7, "Bad provider output", {
+    generateAudienceFiltersWithCache(WORKSPACE_ID, "Bad provider output", {
       generateJson: async () => ({ revenue_gt: 1000 }),
       readCache: async () => {
         readCacheCalled = true;

@@ -42,7 +42,7 @@ import {
 
 type CountRow = { count: number };
 type CampaignMetricsRow = { count: number; latest_at: Date | string | null };
-type WorkspaceNameRow = { id: number; name: string };
+type WorkspaceNameRow = { id: string; name: string };
 
 export type AdminPageParams = {
   search: string;
@@ -98,7 +98,7 @@ export async function loadAdminHealth(): Promise<AdminHealthStatus> {
 }
 
 async function loadWorkspaceMetrics(
-  workspaceId: number,
+  workspaceId: string,
 ): Promise<AdminWorkspaceMetrics> {
   try {
     return await withWorkspace(workspaceId, async (client) => {
@@ -154,7 +154,7 @@ export async function loadAdminWorkspaces(
 }
 
 export async function loadAdminWorkspaceDetail(
-  workspaceId: number,
+  workspaceId: string,
 ): Promise<AdminWorkspaceDetail | null> {
   await initializeDatabase();
 

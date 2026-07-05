@@ -12,7 +12,7 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function getCurrentWorkspaceId(workspaceId: number | null): number {
+function getCurrentWorkspaceId(workspaceId: string | null): string {
   if (!workspaceId) {
     throw new Error("Workspace context is required");
   }

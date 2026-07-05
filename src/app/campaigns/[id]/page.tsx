@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { CampaignDetail } from "@/features/campaigns/components/campaign-detail";
+import { isUuid } from "@/lib/identifiers";
 import { requireServerWorkspaceSession } from "@/lib/server-auth";
 
 export const dynamic = "force-dynamic";
@@ -21,9 +22,7 @@ export default async function CampaignDetailPage({
   await requireServerWorkspaceSession();
 
   const { id } = await params;
-  const campaignId = Number(id);
-
-  if (!Number.isInteger(campaignId) || campaignId <= 0) {
+  if (!isUuid(id)) {
     notFound();
   }
 
@@ -34,7 +33,7 @@ export default async function CampaignDetailPage({
       eyebrow="Campaign delivery"
       title="Campaign details"
     >
-      <CampaignDetail campaignId={campaignId} />
+      <CampaignDetail campaignId={id} />
     </AppShell>
   );
 }

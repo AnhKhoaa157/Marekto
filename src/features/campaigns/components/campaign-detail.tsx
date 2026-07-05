@@ -3,7 +3,7 @@ import Link from "next/link";
 import { CampaignEmailLogs } from "@/features/campaigns/components/campaign-email-logs";
 
 type CampaignDetailProps = {
-  campaignId: number;
+  campaignId: string;
 };
 
 export function CampaignDetail({ campaignId }: Readonly<CampaignDetailProps>) {

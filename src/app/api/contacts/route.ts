@@ -13,8 +13,8 @@ const SELECT_CONTACTS_SQL =
   'SELECT * FROM "Contacts" WHERE workspace_id = $1 ORDER BY created_at DESC, id DESC';
 
 type ContactRow = {
-  id: number;
-  workspace_id: number;
+  id: string;
+  workspace_id: string;
   email: string;
   first_name: string | null;
   last_name: string | null;

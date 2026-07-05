@@ -21,7 +21,7 @@ export async function getServerAuthSession(): Promise<AuthTokenPayload | null> {
   return token ? verifyJWT(token) : null;
 }
 
-async function getSessionUserRole(userId: number): Promise<string | null> {
+async function getSessionUserRole(userId: string): Promise<string | null> {
   await initializeDatabase();
 
   const result = await query<UserRoleRow>(SELECT_USER_ROLE_SQL, [userId]);
@@ -69,7 +69,7 @@ export async function requireServerUserSession(): Promise<AuthTokenPayload> {
 }
 
 export async function requireServerWorkspaceSession(): Promise<
-  AuthTokenPayload & { workspaceId: number }
+  AuthTokenPayload & { workspaceId: string }
 > {
   const session = await requireServerUserSession();
 

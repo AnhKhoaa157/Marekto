@@ -12,8 +12,8 @@ const INSERT_LIST_SQL =
   'INSERT INTO "Lists" (workspace_id, name, description) VALUES ($1, $2, $3) RETURNING id, workspace_id, name, description, created_at';
 
 type ListRow = {
-  id: number;
-  workspace_id: number;
+  id: string;
+  workspace_id: string;
   name: string;
   description: string | null;
   created_at: Date;

@@ -4,6 +4,7 @@ import {
   authenticateAccountRequest,
   statusForAccountAuthError,
 } from "@/lib/account-auth";
+import { parseUuid } from "@/lib/identifiers";
 import { revokeWorkspaceInvite } from "@/lib/workspace-collaboration";
 
 export const runtime = "nodejs";
@@ -13,17 +14,7 @@ type RouteParams = {
   params: Promise<{ id: string }>;
 };
 
-function parseInviteId(value: string): number {
-  const inviteId = Number(value);
-
-  if (!Number.isInteger(inviteId) || inviteId <= 0) {
-    throw new Error("Invite id is invalid");
-  }
-
-  return inviteId;
-}
-
-function getCurrentWorkspaceId(workspaceId: number | null): number {
+function getCurrentWorkspaceId(workspaceId: string | null): string {
   if (!workspaceId) {
     throw new Error("Workspace context is required");
   }
@@ -32,7 +23,7 @@ function getCurrentWorkspaceId(workspaceId: number | null): number {
 }
 
 function statusForError(message: string): number {
-  if (message === "Invite id is invalid" || message === "Workspace context is required") {
+  if (message === "Invalid invite id" || message === "Workspace context is required") {
     return 400;
   }
 
@@ -52,7 +43,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const identity = await authenticateAccountRequest(request);
     const workspaceId = getCurrentWorkspaceId(identity.workspaceId);
     const { id } = await params;
-    const inviteId = parseInviteId(id);
+    const inviteId = parseUuid(id, "Invite id");
 
     await revokeWorkspaceInvite({
       actorUserId: identity.userId,

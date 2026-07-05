@@ -2,15 +2,20 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import {
+  formatEntityCode,
+  prefixForAuditTarget,
+} from "@/lib/identifiers";
+
 type WorkspaceMember = {
-  user_id: number;
+  user_id: string;
   email: string;
   role: "owner" | "member";
   joined_at: string | null;
 };
 
 type WorkspaceInvite = {
-  id: number;
+  id: string;
   workspace_name: string;
   created_by_email: string | null;
   expires_at: string;
@@ -19,10 +24,10 @@ type WorkspaceInvite = {
 };
 
 type WorkspaceAuditEvent = {
-  id: number;
+  id: string;
   actor_email: string | null;
   target_type: string;
-  target_id: number | null;
+  target_id: string | null;
   action: string;
   created_at: string;
 };
@@ -265,7 +270,10 @@ export function WorkspaceMembersManager() {
                 {members.map((member) => (
                   <tr key={member.user_id}>
                     <td className="py-3 pr-4 font-medium text-zinc-100">
-                      {member.email}
+                      <p>{member.email}</p>
+                      <p className="mt-0.5 text-xs font-normal text-zinc-500">
+                        {formatEntityCode("US", member.user_id)}
+                      </p>
                     </td>
                     <td className="py-3 pr-4 text-zinc-300">{member.role}</td>
                     <td className="py-3 pr-4 text-zinc-400">
@@ -329,7 +337,7 @@ export function WorkspaceMembersManager() {
               >
                 <div>
                   <p className="text-sm font-medium text-zinc-100">
-                    Invite #{invite.id}
+                    {formatEntityCode("IV", invite.id)}
                   </p>
                   <p className="mt-1 text-xs text-zinc-500">
                     Created {formatDate(invite.created_at)} by{" "}
@@ -382,7 +390,9 @@ export function WorkspaceMembersManager() {
                 </p>
                 <p className="mt-1 text-xs text-zinc-500">
                   {event.target_type}
-                  {event.target_id ? ` #${event.target_id}` : ""} ·{" "}
+                  {event.target_id
+                    ? ` ${formatEntityCode(prefixForAuditTarget(event.target_type), event.target_id)}`
+                    : ""} ·{" "}
                   {formatDate(event.created_at)}
                 </p>
               </div>

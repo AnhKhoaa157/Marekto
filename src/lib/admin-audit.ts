@@ -33,10 +33,10 @@ export type AdminAuditTargetType =
 export type AdminAuditMetadata = Record<string, string | number | boolean>;
 
 export type AdminAuditEntry = {
-  adminUserId: number;
+  adminUserId: string;
   action: AdminAuditAction;
   targetType: AdminAuditTargetType;
-  targetId: number | null;
+  targetId: string | null;
   metadata?: Record<string, unknown>;
 };
 
@@ -99,7 +99,7 @@ export function sanitizeAuditMetadata(
  */
 export function buildAdminAuditInsert(entry: AdminAuditEntry): {
   text: string;
-  params: [number, AdminAuditAction, AdminAuditTargetType, number | null, string];
+  params: [string, AdminAuditAction, AdminAuditTargetType, string | null, string];
 } {
   const metadata = sanitizeAuditMetadata(entry.metadata);
 

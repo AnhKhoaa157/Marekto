@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { USER_ID, WORKSPACE_ID } from "./test-ids.mjs";
+
 import { authenticateTenantRequest } from "../src/lib/proxy-auth.ts";
 
 function cookies(value) {
@@ -44,12 +46,12 @@ test("replaces a spoofed workspace header with the verified JWT workspace", asyn
       "x-workspace-id": "999",
     }),
     cookies(null),
-    async () => ({ userId: 8, workspaceId: 12 }),
+    async () => ({ userId: USER_ID, workspaceId: WORKSPACE_ID }),
   );
 
   assert.equal(result.ok, true);
   if (result.ok) {
-    assert.equal(result.headers.get("x-workspace-id"), "12");
+    assert.equal(result.headers.get("x-workspace-id"), WORKSPACE_ID);
   }
 });
 
@@ -57,7 +59,7 @@ test("rejects a valid account token with no workspace context", async () => {
   const result = await authenticateTenantRequest(
     new Headers({ authorization: "Bearer valid" }),
     cookies(null),
-    async () => ({ userId: 8, workspaceId: null }),
+    async () => ({ userId: USER_ID, workspaceId: null }),
   );
 
   assert.deepEqual(result, {

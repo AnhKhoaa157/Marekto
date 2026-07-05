@@ -14,6 +14,7 @@ import {
   toCampaignDeliverySummary,
   toCampaignEmailLogItem,
 } from "../src/lib/email-logs.ts";
+import { CAMPAIGN_ID, EMAIL_LOG_ID, WORKSPACE_ID } from "./test-ids.mjs";
 
 test("limit parser defaults and enforces bounds", () => {
   assert.equal(parseEmailLogLimit(null), DEFAULT_EMAIL_LOG_LIMIT);
@@ -26,13 +27,11 @@ test("limit parser defaults and enforces bounds", () => {
   assert.throws(() => parseEmailLogLimit("-5"), /limit must be a positive integer/);
 });
 
-test("cursor parser accepts only positive integer log ids", () => {
+test("cursor parser accepts only UUID log ids", () => {
   assert.equal(parseEmailLogCursor(null), null);
-  assert.equal(parseEmailLogCursor("42"), 42);
-  assert.throws(() => parseEmailLogCursor("abc"), /cursor must be a positive integer/);
-  assert.throws(() => parseEmailLogCursor("0"), /cursor must be a positive integer/);
-  assert.throws(() => parseEmailLogCursor("-1"), /cursor must be a positive integer/);
-  assert.throws(() => parseEmailLogCursor("1.5"), /cursor must be a positive integer/);
+  assert.equal(parseEmailLogCursor(EMAIL_LOG_ID), EMAIL_LOG_ID);
+  assert.throws(() => parseEmailLogCursor("abc"), /Invalid cursor/);
+  assert.throws(() => parseEmailLogCursor("0"), /Invalid cursor/);
 });
 
 test("categorizes delivery outcomes from real log fields", () => {
@@ -111,8 +110,13 @@ test("categorizes delivery outcomes from real log fields", () => {
 });
 
 test("email log SQL is parameterized and tenant-scoped", () => {
-  const selection = buildEmailLogSelection(7, 3, 50, null);
-  const cursorSelection = buildEmailLogSelection(7, 3, 50, 120);
+  const selection = buildEmailLogSelection(WORKSPACE_ID, CAMPAIGN_ID, 50, null);
+  const cursorSelection = buildEmailLogSelection(
+    WORKSPACE_ID,
+    CAMPAIGN_ID,
+    50,
+    EMAIL_LOG_ID,
+  );
 
   for (const sql of [
     SELECT_CAMPAIGN_DELIVERY_SQL,
@@ -133,18 +137,18 @@ test("email log SQL is parameterized and tenant-scoped", () => {
   assert.match(selection.text, /log\.campaign_id = \$2/);
   assert.match(selection.text, /LEFT JOIN "Contacts"/);
   assert.match(selection.text, /LIMIT \$3/);
-  assert.deepEqual(selection.params, [7, 3, 50]);
+  assert.deepEqual(selection.params, [WORKSPACE_ID, CAMPAIGN_ID, 50]);
   assert.match(cursorSelection.text, /log\.id < \$3/);
   assert.match(cursorSelection.text, /LIMIT \$4/);
-  assert.deepEqual(cursorSelection.params, [7, 3, 120, 50]);
+  assert.deepEqual(cursorSelection.params, [WORKSPACE_ID, CAMPAIGN_ID, EMAIL_LOG_ID, 50]);
 });
 
 test("email log selection rejects invalid pagination inputs", () => {
-  assert.throws(() => buildEmailLogSelection(0, 3, 50, null), /workspaceId/);
-  assert.throws(() => buildEmailLogSelection(7, -1, 50, null), /campaignId/);
-  assert.throws(() => buildEmailLogSelection(7, 3, 0, null), /limit/);
-  assert.throws(() => buildEmailLogSelection(7, 3, 101, null), /limit must be 100 or fewer/);
-  assert.throws(() => buildEmailLogSelection(7, 3, 50, 0), /cursor/);
+  assert.throws(() => buildEmailLogSelection("bad", CAMPAIGN_ID, 50, null), /workspaceId/);
+  assert.throws(() => buildEmailLogSelection(WORKSPACE_ID, "bad", 50, null), /campaignId/);
+  assert.throws(() => buildEmailLogSelection(WORKSPACE_ID, CAMPAIGN_ID, 0, null), /limit/);
+  assert.throws(() => buildEmailLogSelection(WORKSPACE_ID, CAMPAIGN_ID, 101, null), /limit must be 100 or fewer/);
+  assert.throws(() => buildEmailLogSelection(WORKSPACE_ID, CAMPAIGN_ID, 50, "bad"), /cursor/);
 });
 
 test("summary maps aggregate rows and represents empty logs as zero counts", () => {

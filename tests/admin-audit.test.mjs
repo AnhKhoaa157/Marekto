@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { USER_ID, WORKSPACE_ID } from "./test-ids.mjs";
+
 import {
   ADMIN_AUDIT_INSERT_SQL,
   buildAdminAuditInsert,
@@ -52,7 +54,7 @@ test("sanitizeAuditMetadata returns an empty object for missing metadata", () =>
 
 test("buildAdminAuditInsert produces parameterized, sanitized params", () => {
   const { text, params } = buildAdminAuditInsert({
-    adminUserId: 42,
+    adminUserId: USER_ID,
     action: "admin.workspaces.list",
     targetType: "workspace_list",
     targetId: null,
@@ -61,7 +63,7 @@ test("buildAdminAuditInsert produces parameterized, sanitized params", () => {
 
   assert.equal(text, ADMIN_AUDIT_INSERT_SQL);
   assert.match(text, /\$5::jsonb/);
-  assert.equal(params[0], 42);
+  assert.equal(params[0], USER_ID);
   assert.equal(params[1], "admin.workspaces.list");
   assert.equal(params[2], "workspace_list");
   assert.equal(params[3], null);
@@ -71,14 +73,14 @@ test("buildAdminAuditInsert produces parameterized, sanitized params", () => {
   assert.doesNotMatch(String(metadata.search), /abcd1234secret/);
 });
 
-test("buildAdminAuditInsert carries a numeric target id", () => {
+test("buildAdminAuditInsert carries a UUID target id", () => {
   const { params } = buildAdminAuditInsert({
-    adminUserId: 1,
+    adminUserId: USER_ID,
     action: "admin.workspaces.read",
     targetType: "workspace",
-    targetId: 17,
+    targetId: WORKSPACE_ID,
   });
 
-  assert.equal(params[3], 17);
+  assert.equal(params[3], WORKSPACE_ID);
   assert.equal(params[4], "{}");
 });
