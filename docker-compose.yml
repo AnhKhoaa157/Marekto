@@ -1,0 +1,68 @@
+name: marekto
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: marekto
+    ports:
+      - "5432:5432"
+    volumes:
+      - marekto_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  data-intelligence:
+    build:
+      context: ./services/data-intelligence
+    env_file:
+      - ${MAREKTO_DOCKER_ENV_FILE:-./docker/env.example}
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5).read()",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  web:
+    build:
+      context: .
+      target: dev
+    command: npm run dev -- --hostname 0.0.0.0
+    env_file:
+      - ${MAREKTO_DOCKER_ENV_FILE:-./docker/env.example}
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/marekto
+      DATABASE_SSL: disable
+      DATA_INTELLIGENCE_BASE_URL: http://data-intelligence:8080
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - marekto_node_modules:/app/node_modules
+      - marekto_next_cache:/app/.next
+    depends_on:
+      postgres:
+        condition: service_healthy
+      data-intelligence:
+        condition: service_started
+
+volumes:
+  marekto_postgres_data:
+  marekto_node_modules:
+  marekto_next_cache:
