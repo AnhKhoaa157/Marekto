@@ -163,6 +163,31 @@ export function createInviteToken(): string {
   return randomBytes(32).toString("base64url");
 }
 
+export function parseWorkspaceInviteToken(value: unknown): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error("Invite token is required");
+  }
+
+  const input = value.trim();
+  let token = input;
+
+  if (/^https?:\/\//i.test(input)) {
+    try {
+      token = new URL(input).pathname.match(/^\/invite\/([^/]+)\/?$/)?.[1] ?? "";
+    } catch {
+      token = "";
+    }
+  } else if (input.startsWith("/")) {
+    token = input.split(/[?#]/, 1)[0].match(/^\/invite\/([^/]+)\/?$/)?.[1] ?? "";
+  }
+
+  if (!/^[A-Za-z0-9_-]+$/.test(token)) {
+    throw new Error("Invite link is invalid or expired");
+  }
+
+  return token;
+}
+
 function mapWorkspaceSummary(row: WorkspaceSummaryRow): WorkspaceSummary {
   return {
     id: row.id,

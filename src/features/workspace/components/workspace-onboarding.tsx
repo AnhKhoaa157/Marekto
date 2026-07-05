@@ -136,12 +136,12 @@ export function WorkspaceOnboarding() {
           Paste an invite token or open the invite link your teammate shared.
         </p>
         <label className="mt-5 block text-sm font-medium text-zinc-300">
-          Invite token
+          Invite token or link
           <input
             className="mt-2 h-11 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-50 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
             disabled={isSubmitting}
             name="token"
-            placeholder="Invite token"
+            placeholder="Paste token or https://.../invite/..."
             required
             type="text"
           />

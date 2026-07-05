@@ -5,7 +5,10 @@ import {
   statusForAccountAuthError,
 } from "@/lib/account-auth";
 import { signJWT } from "@/lib/auth";
-import { joinWorkspaceInvite } from "@/lib/workspace-collaboration";
+import {
+  joinWorkspaceInvite,
+  parseWorkspaceInviteToken,
+} from "@/lib/workspace-collaboration";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,14 +19,6 @@ const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 type JoinInviteBody = {
   token?: unknown;
 };
-
-function parseInviteToken(value: unknown): string {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error("Invite token is required");
-  }
-
-  return value.trim();
-}
 
 function setAuthCookie(response: NextResponse, token: string): void {
   response.cookies.set({
@@ -55,7 +50,7 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as JoinInviteBody;
     const workspace = await joinWorkspaceInvite({
       userId: identity.userId,
-      token: parseInviteToken(body.token),
+      token: parseWorkspaceInviteToken(body.token),
     });
     const token = await signJWT({
       userId: identity.userId,

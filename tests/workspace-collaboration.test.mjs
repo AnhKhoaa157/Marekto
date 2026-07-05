@@ -6,6 +6,7 @@ process.env.DATABASE_URL ??= "postgresql://postgres:postgres@localhost:5432/mare
 const {
   createInviteToken,
   hashInviteToken,
+  parseWorkspaceInviteToken,
   parseWorkspaceName,
   parseWorkspaceRole,
 } = await import("../src/lib/workspace-collaboration.ts");
@@ -29,4 +30,19 @@ test("invite tokens are random while stored hashes are deterministic", () => {
   assert.notEqual(tokenA, tokenB);
   assert.equal(hashInviteToken(tokenA), hashInviteToken(tokenA));
   assert.notEqual(hashInviteToken(tokenA), tokenA);
+});
+
+test("parseWorkspaceInviteToken accepts tokens and invite links", () => {
+  const token = "46Ig_DdnNGfVOuGGgpqq7HnLZEtDSfi_DdCOs1DBUJw";
+
+  assert.equal(parseWorkspaceInviteToken(token), token);
+  assert.equal(
+    parseWorkspaceInviteToken(`http://localhost:3000/invite/${token}`),
+    token,
+  );
+  assert.equal(parseWorkspaceInviteToken(`/invite/${token}`), token);
+  assert.throws(
+    () => parseWorkspaceInviteToken("http://localhost:3000/not-an-invite"),
+    /invalid or expired/,
+  );
 });
