@@ -1,6 +1,11 @@
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+)
 
 
 class RawContactRow(BaseModel):
@@ -59,4 +64,3 @@ class NormalizeContactsResponse(BaseModel):
     rejected: list[RejectedContactRow]
     duplicate_emails: list[str]
     total_rows: int
-

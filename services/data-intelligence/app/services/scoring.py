@@ -33,7 +33,12 @@ def score_lead(request: LeadScoreRequest) -> LeadScoreResponse:
     ]
 
     if request.email_valid is True:
-        score += _add_factor(factors, "valid_email", 10, "A valid email supports campaign reachability.")
+        score += _add_factor(
+            factors,
+            "valid_email",
+            10,
+            "A valid email supports campaign reachability.",
+        )
     elif request.email_valid is False:
         score += _add_factor(
             factors,
@@ -43,7 +48,12 @@ def score_lead(request: LeadScoreRequest) -> LeadScoreResponse:
         )
 
     if request.has_phone is True:
-        score += _add_factor(factors, "phone_present", 5, "Phone data gives another contact option.")
+        score += _add_factor(
+            factors,
+            "phone_present",
+            5,
+            "Phone data gives another contact option.",
+        )
 
     normalized_tags = {tag.strip().lower().replace(" ", "_") for tag in request.tags}
     high_intent_matches = sorted(normalized_tags & HIGH_INTENT_TAGS)
@@ -66,7 +76,12 @@ def score_lead(request: LeadScoreRequest) -> LeadScoreResponse:
         )
 
     if request.city and request.city.strip().lower() in KNOWN_CITIES:
-        score += _add_factor(factors, "known_city", 3, "Known city can support localized segmentation.")
+        score += _add_factor(
+            factors,
+            "known_city",
+            3,
+            "Known city can support localized segmentation.",
+        )
 
     if request.prior_sent_count > 0:
         impact = min(15, request.prior_sent_count * 3)
@@ -102,4 +117,3 @@ def score_lead(request: LeadScoreRequest) -> LeadScoreResponse:
         factors=factors,
         model_version=MODEL_VERSION,
     )
-
