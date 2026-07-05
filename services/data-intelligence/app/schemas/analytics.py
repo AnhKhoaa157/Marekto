@@ -6,7 +6,6 @@ from pydantic import (
     Field,
 )
 
-
 SegmentDimension = Literal["city", "tag", "lead_score_band"]
 
 
