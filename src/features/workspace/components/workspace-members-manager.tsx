@@ -1,51 +1,30 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   formatEntityCode,
   prefixForAuditTarget,
 } from "@/lib/identifiers";
+import {
+  createMembersPageLoader,
+  type WorkspaceAuditEvent,
+  type WorkspaceInvite,
+  type WorkspaceMember,
+} from "@/features/workspace/lib/members-page-data";
 
-type WorkspaceMember = {
-  user_id: string;
-  email: string;
-  role: "owner" | "member";
-  joined_at: string | null;
+type WorkspaceMembersManagerProps = {
+  /**
+   * Workspace id verified by the server session guard. The page only renders
+   * this component after `requireServerWorkspaceSession()` succeeds, so the
+   * first members request never fires before authentication and workspace
+   * context are established.
+   */
+  workspaceId: string;
 };
-
-type WorkspaceInvite = {
-  id: string;
-  workspace_name: string;
-  created_by_email: string | null;
-  expires_at: string;
-  revoked_at: string | null;
-  created_at: string;
-};
-
-type WorkspaceAuditEvent = {
-  id: string;
-  actor_email: string | null;
-  target_type: string;
-  target_id: string | null;
-  action: string;
-  created_at: string;
-};
-
-type MemberResponse =
-  | { success: true; data: { members: WorkspaceMember[] } }
-  | { success: false; error: string };
-
-type InviteResponse =
-  | { success: true; data: { invites: WorkspaceInvite[] } }
-  | { success: false; error: string };
 
 type CreateInviteResponse =
   | { success: true; data: { inviteUrl: string; invite: WorkspaceInvite } }
-  | { success: false; error: string };
-
-type ActivityResponse =
-  | { success: true; data: { events: WorkspaceAuditEvent[] } }
   | { success: false; error: string };
 
 function getError(body: unknown, fallback: string): string {
@@ -75,67 +54,87 @@ function formatDate(value: string | null): string {
       }).format(date);
 }
 
-export function WorkspaceMembersManager() {
+async function clearInvalidSession(): Promise<void> {
+  await fetch("/api/auth/logout", {
+    credentials: "include",
+    method: "POST",
+  }).catch(() => undefined);
+
+  window.location.replace("/login");
+}
+
+export function WorkspaceMembersManager({
+  workspaceId,
+}: Readonly<WorkspaceMembersManagerProps>) {
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [invites, setInvites] = useState<WorkspaceInvite[]>([]);
   const [events, setEvents] = useState<WorkspaceAuditEvent[]>([]);
   const [latestInviteUrl, setLatestInviteUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [forbidden, setForbidden] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
 
-  const loadData = useCallback(async () => {
-    setError(null);
-    setIsLoading(true);
+  // Single-flight loader: concurrent triggers (mount + a mutation refresh)
+  // join the same in-flight batch instead of duplicating API requests.
+  const loadPageData = useMemo(() => createMembersPageLoader(), []);
 
-    try {
-      const [memberResponse, inviteResponse, activityResponse] = await Promise.all([
-        fetch("/api/workspace/members", { credentials: "include" }),
-        fetch("/api/workspace/invites", { credentials: "include" }),
-        fetch("/api/workspace/activity", { credentials: "include" }),
-      ]);
-      const memberBody = (await memberResponse.json().catch(() => null)) as
-        | MemberResponse
-        | null;
-      const inviteBody = (await inviteResponse.json().catch(() => null)) as
-        | InviteResponse
-        | null;
-      const activityBody = (await activityResponse.json().catch(() => null)) as
-        | ActivityResponse
-        | null;
+  const loadData = useCallback(
+    async (signal?: AbortSignal) => {
+      setError(null);
 
-      if (!memberBody?.success) {
-        setError(getError(memberBody, "Unable to load members."));
-        return;
+      try {
+        const result = await loadPageData(signal ? { signal } : {});
+
+        if (result.kind === "unauthorized") {
+          // Remove stale pre-UUID or expired HttpOnly cookies before login so
+          // subsequent requests cannot keep replaying the invalid session.
+          await clearInvalidSession();
+          return;
+        }
+
+        if (result.kind === "forbidden") {
+          setForbidden(result.message);
+          return;
+        }
+
+        if (result.kind === "error") {
+          setError(result.message);
+          return;
+        }
+
+        setForbidden(null);
+        setMembers(result.data.members);
+        setInvites(result.data.invites);
+        setEvents(result.data.events);
+      } catch (loadError) {
+        if (loadError instanceof DOMException && loadError.name === "AbortError") {
+          return;
+        }
+
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Unable to load workspace members.",
+        );
+      } finally {
+        setIsLoading(false);
       }
-
-      if (!inviteBody?.success) {
-        setError(getError(inviteBody, "Unable to load invites."));
-        return;
-      }
-
-      if (!activityBody?.success) {
-        setError(getError(activityBody, "Unable to load workspace activity."));
-        return;
-      }
-
-      setMembers(memberBody.data.members);
-      setInvites(inviteBody.data.invites);
-      setEvents(activityBody.data.events);
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to load members.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+    },
+    [loadPageData],
+  );
 
   useEffect(() => {
+    const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      void loadData();
+      void loadData(controller.signal);
     }, 0);
 
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [loadData]);
 
   async function mutate(endpoint: string, init: RequestInit, success: string) {
@@ -150,6 +149,11 @@ export function WorkspaceMembersManager() {
         ...init,
       });
       const body: unknown = await response.json().catch(() => null);
+
+      if (response.status === 401) {
+        await clearInvalidSession();
+        return;
+      }
 
       if (!response.ok) {
         setError(getError(body, "Request failed."));
@@ -181,6 +185,11 @@ export function WorkspaceMembersManager() {
         | CreateInviteResponse
         | null;
 
+      if (response.status === 401) {
+        await clearInvalidSession();
+        return;
+      }
+
       if (!body?.success) {
         setError(getError(body, "Unable to create invite."));
         return;
@@ -205,6 +214,19 @@ export function WorkspaceMembersManager() {
     setNotice("Invite link copied.");
   }
 
+  if (forbidden) {
+    return (
+      <div className="rounded-md border border-zinc-800 bg-zinc-900 p-6">
+        <h2 className="text-lg font-semibold text-zinc-50">Owner access required</h2>
+        <p className="mt-2 text-sm text-zinc-400">
+          Only workspace owners can manage members, invites, and activity for{" "}
+          {formatEntityCode("WS", workspaceId)}. Ask an owner for access or switch to a
+          workspace you own.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <section className="rounded-md border border-zinc-800 bg-zinc-900 p-4">
@@ -212,7 +234,8 @@ export function WorkspaceMembersManager() {
           <div>
             <h2 className="text-lg font-semibold text-zinc-50">Invite link</h2>
             <p className="mt-1 text-sm text-zinc-400">
-              Owners can create short-lived invite links for this workspace.
+              Owners can create short-lived invite links for workspace{" "}
+              {formatEntityCode("WS", workspaceId)}.
             </p>
           </div>
           <button
@@ -246,6 +269,7 @@ export function WorkspaceMembersManager() {
               ? "border-red-500/30 bg-red-500/10 text-red-100"
               : "border-emerald-500/30 bg-emerald-500/10 text-emerald-100"
           }`}
+          role={error ? "alert" : "status"}
         >
           {error ?? notice}
         </div>
@@ -260,6 +284,7 @@ export function WorkspaceMembersManager() {
             <table className="min-w-full text-left text-sm">
               <thead className="border-b border-zinc-800 text-xs uppercase tracking-wide text-zinc-500">
                 <tr>
+                  <th className="py-3 pr-4">ID</th>
                   <th className="py-3 pr-4">Email</th>
                   <th className="py-3 pr-4">Role</th>
                   <th className="py-3 pr-4">Joined</th>
@@ -269,11 +294,11 @@ export function WorkspaceMembersManager() {
               <tbody className="divide-y divide-zinc-800">
                 {members.map((member) => (
                   <tr key={member.user_id}>
+                    <td className="py-3 pr-4 font-mono text-xs text-zinc-400">
+                      {formatEntityCode("US", member.user_id)}
+                    </td>
                     <td className="py-3 pr-4 font-medium text-zinc-100">
-                      <p>{member.email}</p>
-                      <p className="mt-0.5 text-xs font-normal text-zinc-500">
-                        {formatEntityCode("US", member.user_id)}
-                      </p>
+                      {member.email}
                     </td>
                     <td className="py-3 pr-4 text-zinc-300">{member.role}</td>
                     <td className="py-3 pr-4 text-zinc-400">

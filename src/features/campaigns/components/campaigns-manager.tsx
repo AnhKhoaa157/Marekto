@@ -726,6 +726,7 @@ export function CampaignsManager() {
               <table className="w-full min-w-full text-left text-sm">
                 <thead className="border-b border-zinc-800 text-xs font-medium uppercase tracking-wide text-zinc-500">
                   <tr>
+                    <th className="py-3 pr-4">ID</th>
                     <th className="py-3 pr-4">Campaign</th>
                     <th className="py-3 pr-4">Delivery</th>
                     <th className="py-3 pr-4">Schedule</th>
@@ -735,11 +736,11 @@ export function CampaignsManager() {
                 <tbody className="divide-y divide-zinc-800">
                   {campaigns.map((campaign) => (
                     <tr key={campaign.id}>
+                      <td className="py-4 pr-4 align-top font-mono text-xs text-zinc-400">
+                        {formatEntityCode("CP", campaign.id)}
+                      </td>
                       <td className="py-4 pr-4">
                         <p className="font-medium text-zinc-100">{campaign.name}</p>
-                        <p className="mt-0.5 text-xs text-zinc-500">
-                          {formatEntityCode("CP", campaign.id)}
-                        </p>
                         <p className="mt-1 text-sm text-zinc-500">
                           {getTemplateName(campaign.template_id)}
                         </p>

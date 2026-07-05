@@ -257,7 +257,7 @@ export async function loadAdminDeliveryDiagnostics(
   await initializeDatabase();
 
   const workspacesResult = await query<WorkspaceNameRow>(
-    'SELECT id, name FROM "Workspaces" ORDER BY id ASC',
+    'SELECT id, name FROM "Workspaces" ORDER BY created_at ASC, id ASC',
   );
 
   const diagnostics: AdminDeliveryDiagnostic[] = [];

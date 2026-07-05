@@ -198,11 +198,17 @@ export function buildEmailLogSelection(
   if (cursor !== null) {
     if (!isUuid(cursor)) throw new Error("cursor must be a UUID");
     params.push(cursor);
-    text += " AND log.id < $" + params.length;
+    text +=
+      " AND (log.sent_at, log.id) < (" +
+      "SELECT cursor_log.sent_at, cursor_log.id FROM \"Email_logs\" cursor_log " +
+      "WHERE cursor_log.workspace_id = $1 AND cursor_log.campaign_id = $2 " +
+      "AND cursor_log.id = $" +
+      params.length +
+      ")";
   }
 
   params.push(limit);
-  text += " ORDER BY log.id DESC LIMIT $" + params.length;
+  text += " ORDER BY log.sent_at DESC, log.id DESC LIMIT $" + params.length;
 
   return { text, params };
 }

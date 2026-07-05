@@ -5,8 +5,8 @@
  * Swagger UI page at `/api-docs`. It mirrors the real route handlers: the auth
  * endpoints are public, while tenant-scoped resource routes are guarded by the
  * `BearerAuth` JWT scheme. The proxy decodes that JWT and injects the
- * integer `x-workspace-id` downstream, so callers authenticate with the token
- * alone rather than supplying the workspace header by hand.
+ * verified UUID `x-workspace-id` downstream, so callers authenticate with the
+ * token alone rather than supplying the workspace header by hand.
  */
 
 const SUCCESS_ENVELOPE_REF = "#/components/schemas/SuccessEnvelope";
@@ -109,7 +109,7 @@ export const openApiSpec = {
       ProfileData: {
         type: "object",
         properties: {
-          id: { type: "integer", example: 1 },
+          id: { type: "string", format: "uuid" },
           email: { type: "string", format: "email", example: "user@example.com" },
           role: { type: "string", example: "user" },
           first_name: { type: "string", nullable: true, example: "First" },
@@ -187,9 +187,9 @@ export const openApiSpec = {
         properties: {
           name: { type: "string", example: "Spring launch" },
           template_id: {
-            type: "integer",
+            type: "string",
+            format: "uuid",
             nullable: true,
-            example: 12,
             description: "References a Template in the same workspace.",
           },
           status: {
@@ -729,7 +729,7 @@ export const openApiSpec = {
             name: "id",
             in: "path",
             required: true,
-            schema: { type: "integer", minimum: 1 },
+            schema: { type: "string", format: "uuid" },
             description: "Campaign id within the authenticated workspace.",
           },
           {
@@ -743,9 +743,9 @@ export const openApiSpec = {
             name: "cursor",
             in: "query",
             required: false,
-            schema: { type: "integer", minimum: 1 },
+            schema: { type: "string", format: "uuid" },
             description:
-              "Pagination cursor: returns log rows with id lower than this value (logs are ordered by id descending).",
+              "Pagination cursor: the id of the last log row from the previous page. Returns rows older than that entry (logs are ordered by sent time, newest first).",
           },
         ],
         responses: {
@@ -763,7 +763,7 @@ export const openApiSpec = {
                         campaign: {
                           type: "object",
                           properties: {
-                            id: { type: "integer" },
+                            id: { type: "string", format: "uuid" },
                             name: { type: "string" },
                             status: { type: "string" },
                             failure_reason: { type: "string", nullable: true },
@@ -811,8 +811,12 @@ export const openApiSpec = {
                           items: {
                             type: "object",
                             properties: {
-                              id: { type: "integer" },
-                              contact_id: { type: "integer", nullable: true },
+                              id: { type: "string", format: "uuid" },
+                              contact_id: {
+                                type: "string",
+                                format: "uuid",
+                                nullable: true,
+                              },
                               recipient_email: { type: "string", nullable: true },
                               recipient_first_name: { type: "string", nullable: true },
                               recipient_last_name: { type: "string", nullable: true },

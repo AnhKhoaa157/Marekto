@@ -266,6 +266,7 @@ export function TemplatesManager() {
               <table className="w-full min-w-full text-left text-sm">
                 <thead className="border-b border-zinc-800 text-xs font-medium uppercase tracking-wide text-zinc-500">
                   <tr>
+                    <th className="py-3 pr-4">ID</th>
                     <th className="py-3 pr-4">Template</th>
                     <th className="py-3 pr-4">Content</th>
                     <th className="py-3 pr-4">Updated</th>
@@ -275,11 +276,11 @@ export function TemplatesManager() {
                 <tbody className="divide-y divide-zinc-800">
                   {templates.map((template) => (
                     <tr key={template.id}>
+                      <td className="py-4 pr-4 font-mono text-xs text-zinc-400">
+                        {formatEntityCode("TP", template.id)}
+                      </td>
                       <td className="py-4 pr-4 font-medium text-zinc-100">
-                        <p>{template.name}</p>
-                        <p className="mt-0.5 text-xs font-normal text-zinc-500">
-                          {formatEntityCode("TP", template.id)}
-                        </p>
+                        {template.name}
                       </td>
                       <td className="py-4 pr-4 text-zinc-400">
                         {template.body_html.trim() ? "HTML provided" : "No HTML content"}

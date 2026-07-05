@@ -1213,7 +1213,7 @@ async function seedDefaultAdmin(client: PoolClient): Promise<void> {
   if (!workspaceId) {
     const ownedWorkspaceResult = await executeQuery<IdRow>(
       client,
-      'SELECT id FROM "Workspaces" WHERE owner_id = $1 ORDER BY id ASC LIMIT 1',
+      'SELECT id FROM "Workspaces" WHERE owner_id = $1 ORDER BY created_at ASC, id ASC LIMIT 1',
       [adminUserId],
     );
     workspaceId = ownedWorkspaceResult.rows[0]?.id ?? null;
