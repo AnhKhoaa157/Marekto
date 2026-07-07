@@ -4,6 +4,7 @@ import {
   REGISTRATION_OTP_TTL_SECONDS,
   generateRegistrationOtp,
   hashOtp,
+  resolveDevelopmentRegistrationOtp,
 } from "@/lib/auth-otp";
 import { initializeDatabase, query } from "@/lib/db";
 import { sendRegistrationOtpEmail } from "@/lib/mail/auth";
@@ -90,7 +91,8 @@ export async function POST(request: NextRequest) {
 
     const body = (await request.json()) as RegisterBody;
     const registration = parseRegisterBody(body);
-    const otp = generateRegistrationOtp();
+    const developmentOtp = resolveDevelopmentRegistrationOtp();
+    const otp = developmentOtp ?? generateRegistrationOtp();
 
     await assertEmailIsAvailable(registration.email);
 
@@ -102,19 +104,21 @@ export async function POST(request: NextRequest) {
       REGISTRATION_OTP_TTL_SECONDS,
     ]);
 
-    try {
-      await sendRegistrationOtpEmail({
-        email: registration.email,
-        otp,
-        expiresInMinutes: REGISTRATION_OTP_TTL_SECONDS / 60,
-      });
-    } catch (mailError) {
-      await query(DELETE_REGISTRATION_OTP_SQL, [registration.email]).catch(
-        (cleanupError) => {
-          console.error("Failed to clean pending registration OTP:", cleanupError);
-        },
-      );
-      throw new Error(sanitizeMailError(mailError));
+    if (!developmentOtp) {
+      try {
+        await sendRegistrationOtpEmail({
+          email: registration.email,
+          otp,
+          expiresInMinutes: REGISTRATION_OTP_TTL_SECONDS / 60,
+        });
+      } catch (mailError) {
+        await query(DELETE_REGISTRATION_OTP_SQL, [registration.email]).catch(
+          (cleanupError) => {
+            console.error("Failed to clean pending registration OTP:", cleanupError);
+          },
+        );
+        throw new Error(sanitizeMailError(mailError));
+      }
     }
 
     return NextResponse.json(
@@ -124,6 +128,7 @@ export async function POST(request: NextRequest) {
           verificationRequired: true,
           email: registration.email,
           expiresInSeconds: REGISTRATION_OTP_TTL_SECONDS,
+          ...(developmentOtp ? { developmentOtp } : {}),
         },
       },
       { status: 202 },

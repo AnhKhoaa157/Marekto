@@ -97,6 +97,21 @@ test("unconfigured SMTP warns rather than crashing", () => {
   assert.ok(result.warnings.some((w) => w.includes("SMTP is not configured")));
 });
 
+test("SMTP transport defaults alone still count as unconfigured", () => {
+  const env = validProductionEnv({
+    SMTP_HOST: "",
+    SMTP_PORT: "587",
+    SMTP_SECURE: "false",
+    SMTP_USER: "",
+    SMTP_PASSWORD: "",
+    SMTP_FROM: "",
+  });
+  const result = checkEnvironment(env, true);
+
+  assert.equal(result.ok, true);
+  assert.ok(result.warnings.some((w) => w.includes("SMTP is not configured")));
+});
+
 test("out-of-bounds GEMINI_TIMEOUT_MS fails", () => {
   const result = checkEnvironment(validProductionEnv({ GEMINI_TIMEOUT_MS: "500" }), true);
   assert.equal(result.ok, false);

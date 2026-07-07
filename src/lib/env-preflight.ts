@@ -134,8 +134,10 @@ function checkDatabase(env: PreflightEnv, isProduction: boolean, result: Preflig
 }
 
 function checkSmtp(env: PreflightEnv, isProduction: boolean, result: PreflightResult): void {
-  const smtpKeys = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"];
-  const anySet = smtpKeys.some((key) => (env[key]?.trim() ?? "") !== "");
+  const smtpConnectionKeys = ["SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"];
+  const anySet = smtpConnectionKeys.some(
+    (key) => (env[key]?.trim() ?? "") !== "",
+  );
 
   if (!anySet) {
     const message = "SMTP is not configured; campaign delivery will fail until it is set.";

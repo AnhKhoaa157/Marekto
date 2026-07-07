@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { sendRegistrationOtpEmail } from "../src/lib/mail/auth.ts";
+
 import {
   isSmtpConfigured,
   resolveSmtpConfig,
@@ -70,6 +72,35 @@ test("sends campaign email through an injected transporter", async () => {
   assert.equal(messages[0].disableFileAccess, true);
   assert.equal(messages[0].disableUrlAccess, true);
   assert.deepEqual(result.accepted, ["recipient@example.test"]);
+});
+
+test("registration OTP email uses dark-mode-safe solid backgrounds", async () => {
+  const config = resolveSmtpConfig(validSmtpEnv);
+  let sentMessage;
+  const transporter = {
+    async sendMail(options) {
+      sentMessage = options;
+      return {
+        messageId: "message-otp",
+        accepted: [options.to],
+        rejected: [],
+        pending: [],
+        response: "250 queued",
+        envelope: { from: "mailer@example.test", to: [options.to] },
+      };
+    },
+  };
+
+  await sendRegistrationOtpEmail(
+    { email: "owner@example.test", otp: "591535", expiresInMinutes: 10 },
+    transporter,
+    config,
+  );
+
+  assert.match(sentMessage.html, /prefers-color-scheme: dark/);
+  assert.match(sentMessage.html, /bgcolor="#312e81"/);
+  assert.match(sentMessage.html, /background-color:#312e81/);
+  assert.doesNotMatch(sentMessage.html, /linear-gradient|rgba\(/);
 });
 
 test("sanitizes SMTP secrets from delivery errors", () => {
