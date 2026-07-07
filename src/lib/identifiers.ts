@@ -25,6 +25,7 @@ export type EntityCodePrefix =
   | "EL"
   | "AI"
   | "IV"
+  | "PO"
   | "AL";
 
 export function formatEntityCode(prefix: EntityCodePrefix, id: EntityId): string {

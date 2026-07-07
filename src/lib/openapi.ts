@@ -25,6 +25,7 @@ export const openApiSpec = {
     { name: "Auth", description: "Registration, login, and logout" },
     { name: "Profile", description: "Authenticated user profile" },
     { name: "AI", description: "Authenticated AI-assisted workflows" },
+    { name: "Billing", description: "Workspace billing and subscriptions" },
     { name: "Lists", description: "Contact lists (tenant-scoped)" },
     { name: "Campaigns", description: "Email campaigns (tenant-scoped)" },
     { name: "Worker", description: "Background / system triggers" },
@@ -348,6 +349,115 @@ export const openApiSpec = {
           },
         },
         required: ["success", "data"],
+      },
+      BillingCheckoutRequest: {
+        type: "object",
+        properties: {
+          plan: {
+            type: "string",
+            enum: ["pro", "team"],
+            description:
+              "Requested paid plan. Price/provider ids are resolved server-side.",
+          },
+        },
+        required: ["plan"],
+        additionalProperties: false,
+      },
+      BillingCheckoutResponse: {
+        type: "object",
+        properties: {
+          success: { type: "boolean", example: true },
+          data: {
+            type: "object",
+            properties: {
+              url: {
+                type: "string",
+                format: "uri",
+                description: "Provider checkout URL or mock checkout URL.",
+              },
+              order: { type: "object" },
+            },
+            required: ["url", "order"],
+          },
+        },
+        required: ["success", "data"],
+      },
+      BillingStatusResponse: {
+        type: "object",
+        properties: {
+          success: { type: "boolean", example: true },
+          data: {
+            type: "object",
+            properties: {
+              provider: { type: "string", enum: ["mock", "stripe", "sepay"] },
+              providerConfigured: { type: "boolean" },
+              plans: { type: "array", items: { type: "object" } },
+              subscription: { type: "object" },
+              pendingOrders: { type: "array", items: { type: "object" } },
+              usage: { type: "object" },
+            },
+            required: [
+              "provider",
+              "providerConfigured",
+              "plans",
+              "subscription",
+              "pendingOrders",
+              "usage",
+            ],
+          },
+        },
+        required: ["success", "data"],
+      },
+      BillingPortalResponse: {
+        type: "object",
+        properties: {
+          success: { type: "boolean", example: true },
+          data: {
+            type: "object",
+            properties: {
+              url: { type: "string", format: "uri" },
+            },
+            required: ["url"],
+          },
+        },
+        required: ["success", "data"],
+      },
+      BillingWebhookResponse: {
+        type: "object",
+        properties: {
+          success: { type: "boolean", example: true },
+          data: {
+            type: "object",
+            properties: {
+              processed: { type: "boolean" },
+              eventId: { type: "string" },
+            },
+            required: ["processed", "eventId"],
+          },
+        },
+        required: ["success", "data"],
+      },
+      SepayWebhookRequest: {
+        type: "object",
+        description:
+          "SePay bank transaction webhook payload. In sandbox, include the Marekto payment code (MKT...) in code, content, or description.",
+        properties: {
+          id: { oneOf: [{ type: "integer" }, { type: "string" }] },
+          gateway: { type: "string", example: "Vietcombank" },
+          transactionDate: { type: "string", example: "2026-07-07 11:08:33" },
+          accountNumber: { type: "string" },
+          code: { type: "string", example: "MKT123456789ABC" },
+          content: {
+            type: "string",
+            example: "MKT123456789ABC chuyen tien",
+          },
+          transferType: { type: "string", enum: ["in", "out"], example: "in" },
+          transferAmount: { type: "integer", example: 99000 },
+          accumulated: { type: "integer" },
+          referenceCode: { type: "string", example: "FT24012345678" },
+        },
+        required: ["id", "transferType", "transferAmount"],
+        additionalProperties: true,
       },
     },
     responses: {
@@ -676,6 +786,136 @@ export const openApiSpec = {
               },
             },
           },
+        },
+      },
+    },
+    "/api/billing/checkout": {
+      post: {
+        tags: ["Billing"],
+        summary: "Create a billing checkout order",
+        description:
+          "Owner-only. Creates a pending payment order and returns a provider checkout URL. The requested plan is allowlisted server-side; clients cannot submit price ids or workspace ids.",
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/BillingCheckoutRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Checkout order created.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/BillingCheckoutResponse" },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": {
+            description: "Workspace owner access required.",
+            content: {
+              "application/json": {
+                schema: { $ref: ERROR_ENVELOPE_REF },
+              },
+            },
+          },
+          "503": { $ref: "#/components/responses/ServerError" },
+        },
+      },
+    },
+    "/api/billing/status": {
+      get: {
+        tags: ["Billing"],
+        summary: "Read workspace billing status",
+        description:
+          "Owner-only. Returns current subscription, provider readiness, pending orders, plan catalog, and Phase 17 usage/limit data.",
+        security: [{ BearerAuth: [] }],
+        responses: {
+          "200": {
+            description: "Billing status.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/BillingStatusResponse" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": {
+            description: "Workspace owner access required.",
+            content: {
+              "application/json": {
+                schema: { $ref: ERROR_ENVELOPE_REF },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/billing/portal": {
+      post: {
+        tags: ["Billing"],
+        summary: "Create a billing portal session",
+        description:
+          "Owner-only. Returns a provider billing portal URL when the configured provider supports one. The mock provider returns a clear unavailable error.",
+        security: [{ BearerAuth: [] }],
+        responses: {
+          "200": {
+            description: "Billing portal session.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/BillingPortalResponse" },
+              },
+            },
+          },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": {
+            description: "Workspace owner access required.",
+            content: {
+              "application/json": {
+                schema: { $ref: ERROR_ENVELOPE_REF },
+              },
+            },
+          },
+          "501": { $ref: "#/components/responses/ServerError" },
+        },
+      },
+    },
+    "/api/billing/webhook": {
+      post: {
+        tags: ["Billing"],
+        summary: "Receive provider billing webhooks",
+        description:
+          "Provider-facing endpoint. Mock verifies x-marekto-billing-signature and processes payment_order.paid/payment_order.failed. SePay sandbox accepts a bank transaction webhook, matches the MKT... payment code in code/content/description, and marks the order paid when transferType is in and transferAmount covers the order.",
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                oneOf: [
+                  { type: "object", additionalProperties: true },
+                  { $ref: "#/components/schemas/SepayWebhookRequest" },
+                ],
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Webhook processed or safely ignored as duplicate.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/BillingWebhookResponse" },
+              },
+            },
+          },
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "500": { $ref: "#/components/responses/ServerError" },
         },
       },
     },

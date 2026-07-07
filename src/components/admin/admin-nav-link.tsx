@@ -6,6 +6,7 @@ import { useState } from "react";
 
 export type AdminRoute =
   | "/admin"
+  | "/admin/billing-plans"
   | "/admin/workspaces"
   | "/admin/users"
   | "/admin/delivery-diagnostics"

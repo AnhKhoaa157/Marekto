@@ -17,6 +17,7 @@ type AdminShellProps = {
 
 const navigationItems: ReadonlyArray<{ href: AdminRoute; label: string }> = [
   { href: "/admin", label: "Overview" },
+  { href: "/admin/billing-plans", label: "Billing plans" },
   { href: "/admin/workspaces", label: "Workspaces" },
   { href: "/admin/users", label: "Users" },
   { href: "/admin/delivery-diagnostics", label: "Delivery diagnostics" },

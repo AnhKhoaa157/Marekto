@@ -6,12 +6,15 @@ import { BrandLogo } from "@/components/brand/brand-logo";
 import { BackToTop } from "@/components/homepage/back-to-top";
 import { Background3D } from "@/components/homepage/background-3d";
 import { HeroStage } from "@/components/homepage/hero-stage";
+import { getBillingPlanCatalog, type BillingPlan } from "@/lib/billing";
 
 export const metadata: Metadata = {
   title: "Marekto — AI-powered marketing automation",
   description:
     "Marekto helps marketing teams enrich contacts, segment audiences, schedule campaigns, personalize emails with AI, and deliver securely across isolated workspaces.",
 };
+
+export const dynamic = "force-dynamic";
 
 type IconProps = Readonly<{ className?: string }>;
 
@@ -183,6 +186,7 @@ function ArrowIcon({ className }: IconProps) {
 const navLinks: ReadonlyArray<{ href: string; label: string }> = [
   { href: "#product", label: "Product" },
   { href: "#flow", label: "Flow" },
+  { href: "#pricing", label: "Pricing" },
   { href: "#security", label: "Security" },
 ];
 
@@ -297,7 +301,6 @@ const securityPoints: ReadonlyArray<{
     icon: SegmentIcon,
   },
 ];
-
 
 function Navbar() {
   return (
@@ -494,6 +497,112 @@ function FeaturesSection() {
             );
           })}
         </div>
+      </div>
+    </section>
+  );
+}
+
+function formatPublicPlanPrice(plan: BillingPlan): { price: string; note: string } {
+  if (plan.monthlyAmountCents === 0) {
+    return { price: "0 VND", note: "forever" };
+  }
+
+  if (plan.currency.toLowerCase() === "vnd") {
+    return {
+      price:
+        plan.monthlyAmountCents % 1000 === 0
+          ? `${plan.monthlyAmountCents / 1000}k`
+          : new Intl.NumberFormat("vi-VN").format(plan.monthlyAmountCents),
+      note: "VND / workspace / month",
+    };
+  }
+
+  return {
+    price: new Intl.NumberFormat("en-US", {
+      currency: plan.currency.toUpperCase(),
+      style: "currency",
+    }).format(plan.monthlyAmountCents / 100),
+    note: "per workspace / month",
+  };
+}
+
+function PricingSection({ plans }: Readonly<{ plans: BillingPlan[] }>) {
+  return (
+    <section id="pricing" className="border-b border-zinc-800/80 scroll-mt-20">
+      <div className="mx-auto w-full max-w-7xl px-4 py-20 sm:px-6 lg:px-8 lg:py-24">
+        <SectionHeading
+          eyebrow="Pricing"
+          title="Start free, upgrade when the workspace grows"
+          description="Simple plan limits match the product gates already enforced in the app. Payment provider integration is being wired through the billing core."
+        />
+
+        <div className="mt-12 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {plans.map((plan) => {
+            const highlighted = plan.code === "pro";
+            const { price, note } = formatPublicPlanPrice(plan);
+
+            return (
+              <article
+                className={`relative rounded-md border p-6 ${
+                  highlighted
+                    ? "border-indigo-500/60 bg-indigo-950/30"
+                    : "border-zinc-800 bg-zinc-900/60"
+                }`}
+                key={plan.code}
+              >
+                {highlighted ? (
+                  <span className="absolute right-4 top-4 rounded-md border border-indigo-400/40 bg-indigo-500/20 px-2 py-1 text-xs font-semibold text-indigo-100">
+                    Recommended
+                  </span>
+                ) : null}
+
+                <h3 className="text-lg font-semibold text-zinc-50">
+                  {plan.name}
+                </h3>
+                <p className="mt-2 min-h-12 text-sm leading-6 text-zinc-400">
+                  {plan.description}
+                </p>
+
+                <div className="mt-6">
+                  <span className="text-4xl font-semibold text-zinc-50">
+                    {price}
+                  </span>
+                  <span className="ml-2 text-sm text-zinc-500">{note}</span>
+                </div>
+
+                <ul className="mt-6 space-y-3">
+                  {plan.features.map((feature) => (
+                    <li
+                      className="flex gap-3 text-sm leading-6 text-zinc-300"
+                      key={`${plan.code}-${feature}`}
+                    >
+                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <Link
+                  className={`mt-8 inline-flex h-10 w-full items-center justify-center rounded-md px-4 text-sm font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-indigo-400 ${
+                    highlighted
+                      ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                      : "border border-zinc-700 text-zinc-200 hover:border-zinc-600 hover:bg-zinc-900"
+                  }`}
+                  href="/register"
+                >
+                  {plan.code === "free" ? "Start free" : `Choose ${plan.name}`}
+                </Link>
+              </article>
+            );
+          })}
+        </div>
+
+        <p className="mx-auto mt-6 max-w-2xl text-center text-sm leading-6 text-zinc-500">
+          Launch pricing is intentionally below generic AI Pro subscriptions:
+          Marekto sells the marketing workflow around AI, not the base model
+          itself. Admins can adjust these plan prices and limits from the admin
+          console.
+        </p>
       </div>
     </section>
   );
@@ -719,7 +828,9 @@ function Footer() {
   );
 }
 
-export default function HomePage() {
+export default async function HomePage() {
+  const pricingPlans = await getBillingPlanCatalog();
+
   return (
     <div className="relative min-h-screen overflow-x-hidden text-zinc-50">
       <Background3D />
@@ -729,6 +840,7 @@ export default function HomePage() {
           <Hero />
           <FlowSection />
           <FeaturesSection />
+          <PricingSection plans={pricingPlans} />
           <SecuritySection />
           <FinalCta />
         </main>

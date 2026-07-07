@@ -12,6 +12,7 @@ const SYSTEM_API_ROOTS = new Set([
   "openapi.json",
   "worker",
   "admin",
+  "billing",
   "profile",
   "workspace",
   "workspaces",

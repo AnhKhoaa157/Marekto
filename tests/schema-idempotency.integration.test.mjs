@@ -32,6 +32,8 @@ const UUID_IDENTIFIER_COLUMNS = {
   Workspace_invites: ["id", "workspace_id", "created_by_user_id"],
   Workspace_audit_logs: ["id", "workspace_id", "actor_user_id", "target_id"],
   Usage_counters: ["id", "workspace_id", "user_id"],
+  Payment_orders: ["id", "workspace_id", "user_id"],
+  Billing_events: ["id", "workspace_id", "payment_order_id"],
 };
 
 function applySchemaInFreshProcess() {
