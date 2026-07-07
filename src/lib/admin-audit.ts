@@ -18,6 +18,8 @@ import { sanitizeWorkerLogReason } from "./worker-log.ts";
 
 export type AdminAuditAction =
   | "admin.health.read"
+  | "admin.billing_plans.read"
+  | "admin.billing_plans.update"
   | "admin.workspaces.list"
   | "admin.workspaces.read"
   | "admin.users.list"
@@ -25,6 +27,8 @@ export type AdminAuditAction =
 
 export type AdminAuditTargetType =
   | "system"
+  | "billing_plan"
+  | "billing_plan_list"
   | "workspace_list"
   | "workspace"
   | "user_list"

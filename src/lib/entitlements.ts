@@ -21,7 +21,7 @@ export type UsageKey =
   | "ai.personalization_recipients"
   | "contact_intelligence.rows";
 
-type PlanEntitlements = {
+export type PlanEntitlements = {
   name: string;
   limits: Record<LimitKey, number | null>;
 };
@@ -45,6 +45,11 @@ type CountRow = QueryResultRow & {
 
 type PlanRow = QueryResultRow & {
   plan_code: string | null;
+};
+
+type PlanEntitlementRow = QueryResultRow & {
+  name: string | null;
+  limits: unknown;
 };
 
 type UsageRow = QueryResultRow & {
@@ -74,7 +79,7 @@ export const PLAN_ENTITLEMENTS: Record<PlanCode, PlanEntitlements> = {
   pro: {
     name: "Pro",
     limits: {
-      "user.owned_workspaces": 5,
+      "user.owned_workspaces": 3,
       "workspace.members": 10,
       "ai.campaign_builder": 200,
       "ai.segmentation": 500,
@@ -85,15 +90,33 @@ export const PLAN_ENTITLEMENTS: Record<PlanCode, PlanEntitlements> = {
   team: {
     name: "Team",
     limits: {
-      "user.owned_workspaces": null,
-      "workspace.members": null,
-      "ai.campaign_builder": null,
-      "ai.segmentation": null,
-      "ai.personalization_recipients": null,
-      "contact_intelligence.rows": null,
+      "user.owned_workspaces": 10,
+      "workspace.members": 25,
+      "ai.campaign_builder": 1_000,
+      "ai.segmentation": 2_500,
+      "ai.personalization_recipients": 10_000,
+      "contact_intelligence.rows": 50_000,
     },
   },
 };
+
+export const PLAN_CODES: readonly PlanCode[] = ["free", "pro", "team"];
+
+export const LIMIT_KEYS: readonly LimitKey[] = [
+  "user.owned_workspaces",
+  "workspace.members",
+  "ai.campaign_builder",
+  "ai.segmentation",
+  "ai.personalization_recipients",
+  "contact_intelligence.rows",
+];
+
+export const USAGE_KEYS: readonly UsageKey[] = [
+  "ai.campaign_builder",
+  "ai.segmentation",
+  "ai.personalization_recipients",
+  "contact_intelligence.rows",
+];
 
 export class PlanLimitExceededError extends Error {
   readonly details: LimitDetails;
@@ -115,8 +138,72 @@ function assertUuid(name: string, value: string): void {
   }
 }
 
-function getLimit(planCode: PlanCode, limitKey: LimitKey): number | null {
-  return PLAN_ENTITLEMENTS[planCode].limits[limitKey];
+function normalizeLimitValue(value: unknown): number | null | undefined {
+  if (value === null) {
+    return null;
+  }
+
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    return undefined;
+  }
+
+  return value;
+}
+
+function normalizePlanLimits(
+  planCode: PlanCode,
+  value: unknown,
+): Record<LimitKey, number | null> {
+  const fallback = PLAN_ENTITLEMENTS[planCode].limits;
+
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return { ...fallback };
+  }
+
+  const raw = value as Record<string, unknown>;
+  const limits = { ...fallback };
+
+  for (const limitKey of LIMIT_KEYS) {
+    const normalized = normalizeLimitValue(raw[limitKey]);
+    if (normalized !== undefined) {
+      limits[limitKey] = normalized;
+    }
+  }
+
+  return limits;
+}
+
+export async function getPlanEntitlements(
+  planCode: PlanCode,
+  client?: PoolClient,
+): Promise<PlanEntitlements> {
+  const result = await runQuery<PlanEntitlementRow>(
+    client,
+    'SELECT name, limits FROM "Billing_plans" WHERE plan_code = $1 LIMIT 1',
+    [planCode],
+  );
+  const row = result.rows[0];
+
+  if (!row) {
+    return {
+      name: PLAN_ENTITLEMENTS[planCode].name,
+      limits: { ...PLAN_ENTITLEMENTS[planCode].limits },
+    };
+  }
+
+  return {
+    name: row.name?.trim() || PLAN_ENTITLEMENTS[planCode].name,
+    limits: normalizePlanLimits(planCode, row.limits),
+  };
+}
+
+async function getLimit(
+  planCode: PlanCode,
+  limitKey: LimitKey,
+  client?: PoolClient,
+): Promise<number | null> {
+  const entitlements = await getPlanEntitlements(planCode, client);
+  return entitlements.limits[limitKey];
 }
 
 export function limitErrorResponse(error: PlanLimitExceededError): LimitErrorResponse {
@@ -202,7 +289,7 @@ export async function assertCanCreateOwnedWorkspace(
   client?: PoolClient,
 ): Promise<void> {
   const planCode = await getUserPlanCode(userId, client);
-  const limit = getLimit(planCode, "user.owned_workspaces");
+  const limit = await getLimit(planCode, "user.owned_workspaces", client);
 
   if (limit === null) return;
 
@@ -220,7 +307,7 @@ export async function assertWorkspaceHasMemberCapacity(
   client?: PoolClient,
 ): Promise<void> {
   const planCode = await getWorkspacePlanCode(workspaceId, client);
-  const limit = getLimit(planCode, "workspace.members");
+  const limit = await getLimit(planCode, "workspace.members", client);
 
   if (limit === null) return;
 
@@ -266,7 +353,11 @@ export async function assertWorkspaceUsageAvailable(input: {
   }
 
   const planCode = await getWorkspacePlanCode(input.workspaceId, input.client);
-  const limit = getLimit(planCode, usageKeyToLimitKey(input.usageKey));
+  const limit = await getLimit(
+    planCode,
+    usageKeyToLimitKey(input.usageKey),
+    input.client,
+  );
 
   if (limit === null) return;
 
@@ -335,18 +426,14 @@ export async function getWorkspaceUsageOverview(input: {
   return withTransaction(async (client) => {
     const userPlan = await getUserPlanCode(input.userId, client);
     const workspacePlan = await getWorkspacePlanCode(input.workspaceId, client);
+    const userEntitlements = await getPlanEntitlements(userPlan, client);
+    const workspaceEntitlements = await getPlanEntitlements(workspacePlan, client);
     const ownedUsed = await countOwnedWorkspaces(input.userId, client);
     const memberUsed = await countWorkspaceMembers(input.workspaceId, client);
     const periodStart = currentMonthlyPeriodStart();
-    const usageKeys: UsageKey[] = [
-      "ai.campaign_builder",
-      "ai.segmentation",
-      "ai.personalization_recipients",
-      "contact_intelligence.rows",
-    ];
     const usage = {} as Record<UsageKey, LimitDetails>;
 
-    for (const usageKey of usageKeys) {
+    for (const usageKey of USAGE_KEYS) {
       usage[usageKey] = {
         limit_key: usageKeyToLimitKey(usageKey),
         used: await readWorkspaceUsage(
@@ -355,7 +442,7 @@ export async function getWorkspaceUsageOverview(input: {
           periodStart,
           client,
         ),
-        limit: getLimit(workspacePlan, usageKeyToLimitKey(usageKey)),
+        limit: workspaceEntitlements.limits[usageKeyToLimitKey(usageKey)],
       };
     }
 
@@ -365,12 +452,12 @@ export async function getWorkspaceUsageOverview(input: {
       ownedWorkspaces: {
         limit_key: "user.owned_workspaces",
         used: ownedUsed,
-        limit: getLimit(userPlan, "user.owned_workspaces"),
+        limit: userEntitlements.limits["user.owned_workspaces"],
       },
       workspaceMembers: {
         limit_key: "workspace.members",
         used: memberUsed,
-        limit: getLimit(workspacePlan, "workspace.members"),
+        limit: workspaceEntitlements.limits["workspace.members"],
       },
       usage,
     };

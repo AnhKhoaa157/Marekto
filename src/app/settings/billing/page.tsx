@@ -1,9 +1,10 @@
 import { AppShell } from "@/components/layout/app-shell";
 import {
-  getWorkspaceUsageOverview,
-  PLAN_ENTITLEMENTS,
-  type LimitDetails,
-} from "@/lib/entitlements";
+  BillingCheckoutButton,
+  BillingPortalButton,
+} from "@/app/settings/billing/billing-actions";
+import { getBillingOverview, type BillingPlan } from "@/lib/billing";
+import type { LimitDetails, PlanCode } from "@/lib/entitlements";
 import { formatEntityCode } from "@/lib/identifiers";
 import { requireServerWorkspaceSession } from "@/lib/server-auth";
 import { assertUserCanUseWorkspace } from "@/lib/workspace-collaboration";
@@ -18,6 +19,24 @@ function formatLimit(limit: number | null): string {
 
 function usageText(details: LimitDetails): string {
   return `${details.used} / ${formatLimit(details.limit)}`;
+}
+
+function resolvePlanName(plans: BillingPlan[], planCode: PlanCode): string {
+  return plans.find((plan) => plan.code === planCode)?.name ?? planCode;
+}
+
+function formatMoney(amountCents: number, currency: string): string {
+  if (amountCents === 0) {
+    return "Free";
+  }
+
+  const normalizedCurrency = currency.toUpperCase();
+  const amount = normalizedCurrency === "VND" ? amountCents : amountCents / 100;
+
+  return new Intl.NumberFormat("en-US", {
+    currency: normalizedCurrency,
+    style: "currency",
+  }).format(amount);
 }
 
 function UsageCard({
@@ -57,6 +76,67 @@ function UsageCard({
   );
 }
 
+function PlanCard({
+  currentPlan,
+  plan,
+  providerConfigured,
+}: Readonly<{
+  currentPlan: string;
+  plan: BillingPlan;
+  providerConfigured: boolean;
+}>) {
+  const isCurrent = currentPlan === plan.code;
+  const memberLimit = plan.limits["workspace.members"];
+  const builderLimit = plan.limits["ai.campaign_builder"];
+
+  return (
+    <div className="rounded-md border border-zinc-800 bg-zinc-900 p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold text-zinc-50">{plan.name}</h2>
+          <p className="mt-2 text-sm leading-6 text-zinc-400">
+            {plan.description}
+          </p>
+        </div>
+        {isCurrent ? (
+          <span className="rounded-md border border-emerald-700 bg-emerald-950 px-2 py-1 text-xs font-semibold text-emerald-200">
+            Current
+          </span>
+        ) : null}
+      </div>
+
+      <p className="mt-5 text-2xl font-semibold text-zinc-50">
+        {formatMoney(plan.monthlyAmountCents, plan.currency)}
+        {plan.monthlyAmountCents > 0 ? (
+          <span className="text-sm font-normal text-zinc-500"> / month</span>
+        ) : null}
+      </p>
+
+      <ul className="mt-4 space-y-2 text-sm text-zinc-400">
+        <li>Members: {formatLimit(memberLimit)}</li>
+        <li>Campaign Builder runs: {formatLimit(builderLimit)}</li>
+      </ul>
+
+      <div className="mt-5">
+        {plan.code === "free" ? (
+          <button
+            className="w-full rounded-md border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-500"
+            disabled
+            type="button"
+          >
+            Included
+          </button>
+        ) : (
+          <BillingCheckoutButton
+            disabled={isCurrent || !providerConfigured}
+            plan={plan.code}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default async function BillingSettingsPage() {
   const session = await requireServerWorkspaceSession();
   const workspace = await assertUserCanUseWorkspace(
@@ -66,7 +146,7 @@ export default async function BillingSettingsPage() {
 
   const isOwner = workspace.role === "owner";
   const overview = isOwner
-    ? await getWorkspaceUsageOverview({
+    ? await getBillingOverview({
         userId: session.userId,
         workspaceId: session.workspaceId,
       })
@@ -98,52 +178,86 @@ export default async function BillingSettingsPage() {
                   Current plan
                 </p>
                 <h2 className="mt-1 text-2xl font-semibold text-zinc-50">
-                  {PLAN_ENTITLEMENTS[overview.workspacePlan].name}
+                  {resolvePlanName(overview.plans, overview.subscription.plan_code)}
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-zinc-400">
-                  Usage is measured from real workspace activity. Billing is not
-                  connected yet, so upgrades are shown as placeholders.
+                  Usage is measured from real workspace activity. Provider:{" "}
+                  <span className="font-medium text-zinc-200">
+                    {overview.provider}
+                  </span>
+                  .
                 </p>
+                {!overview.providerConfigured ? (
+                  <p className="mt-2 text-sm leading-6 text-amber-300">
+                    Billing provider is not configured, so checkout actions are
+                    disabled.
+                  </p>
+                ) : null}
               </div>
-              <button
-                className="rounded-md border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300"
-                disabled
-                type="button"
-              >
-                Upgrade placeholder
-              </button>
+              <BillingPortalButton disabled={overview.provider !== "stripe"} />
             </div>
+          </section>
+
+          {overview.pendingOrders.length > 0 ? (
+            <section className="rounded-md border border-amber-900 bg-amber-950/40 p-5">
+              <h2 className="text-sm font-semibold text-amber-100">
+                Pending payment
+              </h2>
+              <div className="mt-3 space-y-2">
+                {overview.pendingOrders.map((order) => (
+                  <p className="text-sm leading-6 text-amber-200" key={order.id}>
+                    {resolvePlanName(overview.plans, order.plan_code)} order{" "}
+                    {formatEntityCode("PO", order.id)} is pending via{" "}
+                    {order.provider}.{" "}
+                    {order.provider === "sepay" && order.provider_order_id
+                      ? `Transfer with content ${order.provider_order_id}, then send the SePay sandbox webhook.`
+                      : "In mock mode, complete it by sending a signed mock webhook."}
+                  </p>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          <section className="grid gap-4 lg:grid-cols-3">
+            {overview.plans.map((plan) => (
+              <PlanCard
+                currentPlan={overview.subscription.plan_code}
+                key={plan.code}
+                plan={plan}
+                providerConfigured={overview.providerConfigured}
+              />
+            ))}
           </section>
 
           <section className="grid gap-4 lg:grid-cols-2">
             <UsageCard
               description="Owned workspaces available to this account."
-              details={overview.ownedWorkspaces}
+              details={overview.usage.ownedWorkspaces}
               label="Owned workspaces"
             />
             <UsageCard
               description="Members currently joined to this workspace."
-              details={overview.workspaceMembers}
+              details={overview.usage.workspaceMembers}
               label="Workspace members"
             />
             <UsageCard
               description="AI Campaign Builder generations this month."
-              details={overview.usage["ai.campaign_builder"]}
+              details={overview.usage.usage["ai.campaign_builder"]}
               label="Campaign Builder"
             />
             <UsageCard
               description="AI audience segmentation generations this month."
-              details={overview.usage["ai.segmentation"]}
+              details={overview.usage.usage["ai.segmentation"]}
               label="Segmentation"
             />
             <UsageCard
               description="Recipient-level AI personalizations this month."
-              details={overview.usage["ai.personalization_recipients"]}
+              details={overview.usage.usage["ai.personalization_recipients"]}
               label="Personalization recipients"
             />
             <UsageCard
               description="Contact rows normalized or scored this month."
-              details={overview.usage["contact_intelligence.rows"]}
+              details={overview.usage.usage["contact_intelligence.rows"]}
               label="Contact intelligence rows"
             />
           </section>
