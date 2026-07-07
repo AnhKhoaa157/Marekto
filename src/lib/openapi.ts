@@ -81,6 +81,12 @@ export const openApiSpec = {
           verificationRequired: { type: "boolean", example: true },
           email: { type: "string", format: "email", example: "owner@acme.com" },
           expiresInSeconds: { type: "integer", example: 600 },
+          developmentOtp: {
+            type: "string",
+            example: "123456",
+            description:
+              "Development-only verification code. Never returned in production.",
+          },
         },
         required: ["verificationRequired", "email", "expiresInSeconds"],
       },

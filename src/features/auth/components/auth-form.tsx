@@ -32,6 +32,7 @@ type RegistrationVerificationData = {
   verificationRequired: true;
   email: string;
   expiresInSeconds: number;
+  developmentOtp?: string;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -45,7 +46,9 @@ function isRegistrationVerificationData(
     isRecord(value) &&
     value.verificationRequired === true &&
     typeof value.email === "string" &&
-    typeof value.expiresInSeconds === "number"
+    typeof value.expiresInSeconds === "number" &&
+    (value.developmentOtp === undefined ||
+      (typeof value.developmentOtp === "string" && /^\d{6}$/.test(value.developmentOtp)))
   );
 }
 
@@ -96,6 +99,7 @@ export function AuthForm({ mode, redirectTo }: Readonly<AuthFormProps>) {
   >(null);
   const [pendingRegistrationExpiresInSeconds, setPendingRegistrationExpiresInSeconds] =
     useState<number | null>(null);
+  const [pendingDevelopmentOtp, setPendingDevelopmentOtp] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
   const cardRef = useRef<HTMLElement>(null);
@@ -225,11 +229,12 @@ export function AuthForm({ mode, redirectTo }: Readonly<AuthFormProps>) {
       if (isRegistrationVerificationData(result.data)) {
         setPendingRegistrationEmail(result.data.email);
         setPendingRegistrationExpiresInSeconds(result.data.expiresInSeconds);
-        setNotice(
-          `We sent a verification code to ${result.data.email}. It expires in ${Math.round(
-            result.data.expiresInSeconds / 60,
-          )} minutes.`,
-        );
+        setPendingDevelopmentOtp(result.data.developmentOtp ?? null);
+        setNotice(result.data.developmentOtp
+          ? `Local development code: ${result.data.developmentOtp}`
+          : `We sent a verification code to ${result.data.email}. It expires in ${Math.round(
+              result.data.expiresInSeconds / 60,
+            )} minutes.`);
         return;
       }
 
@@ -279,14 +284,14 @@ export function AuthForm({ mode, redirectTo }: Readonly<AuthFormProps>) {
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-zinc-100">
-                  Check your inbox
+                  {pendingDevelopmentOtp ? "Local verification" : "Check your inbox"}
                 </p>
                 <p className="mt-1 break-words text-sm leading-6 text-zinc-400">
-                  The code was sent to{" "}
-                  <span className="font-medium text-indigo-200">
-                    {pendingRegistrationEmail}
-                  </span>
-                  .
+                  {pendingDevelopmentOtp ? (
+                    <>Use development code <span className="font-semibold text-indigo-200">{pendingDevelopmentOtp}</span>.</>
+                  ) : (
+                    <>The code was sent to <span className="font-medium text-indigo-200">{pendingRegistrationEmail}</span>.</>
+                  )}
                 </p>
               </div>
             </div>
@@ -305,6 +310,7 @@ export function AuthForm({ mode, redirectTo }: Readonly<AuthFormProps>) {
                 onClick={() => {
                   setPendingRegistrationEmail(null);
                   setPendingRegistrationExpiresInSeconds(null);
+                  setPendingDevelopmentOtp(null);
                   setNotice(null);
                   setError(null);
                 }}

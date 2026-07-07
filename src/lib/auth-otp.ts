@@ -7,6 +7,26 @@ const OTP_MAX = 10 ** OTP_LENGTH;
 export const REGISTRATION_OTP_TTL_SECONDS = 10 * 60;
 export const MAX_REGISTRATION_OTP_ATTEMPTS = 5;
 
+export function resolveDevelopmentRegistrationOtp(
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  if (env.NODE_ENV === "production") {
+    return null;
+  }
+
+  const otp = env.REGISTRATION_DEV_OTP?.trim();
+
+  if (!otp) {
+    return null;
+  }
+
+  if (!/^\d{6}$/.test(otp)) {
+    throw new Error("REGISTRATION_DEV_OTP must be a 6-digit code");
+  }
+
+  return otp;
+}
+
 export function generateRegistrationOtp(): string {
   return String(randomInt(OTP_MIN, OTP_MAX));
 }
