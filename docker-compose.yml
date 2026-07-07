@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: marekto
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
       - marekto_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -17,6 +17,20 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - marekto_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
 
   flyway:
     image: flyway/flyway:10-alpine
@@ -66,6 +80,7 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/marekto
       DATABASE_SSL: disable
       DATA_INTELLIGENCE_BASE_URL: http://data-intelligence:8080
+      REDIS_URL: redis://redis:6379
       PORT: 3000
     ports:
       - "3000:3000"
@@ -78,8 +93,11 @@ services:
         condition: service_completed_successfully
       data-intelligence:
         condition: service_started
+      redis:
+        condition: service_healthy
 
 volumes:
   marekto_postgres_data:
   marekto_node_modules:
   marekto_next_cache:
+  marekto_redis_data:

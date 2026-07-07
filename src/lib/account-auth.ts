@@ -1,7 +1,8 @@
 import { type NextRequest } from "next/server";
 
-import { type AuthTokenPayload, verifyJWT } from "@/lib/auth";
+import { type AuthTokenPayload } from "@/lib/auth";
 import { initializeDatabase, query } from "@/lib/db";
+import { verifySessionToken } from "@/lib/session-auth";
 
 const AUTH_COOKIE_NAME = "auth_token";
 const BEARER_PREFIX = "Bearer ";
@@ -36,11 +37,21 @@ export async function authenticateAccountRequest(
     throw new Error("Unauthorized: Missing token");
   }
 
-  const identity = await verifyJWT(token);
+  const verification = await verifySessionToken(token);
 
-  if (!identity) {
+  if (!verification.ok && verification.reason === "replaced") {
+    throw new Error("Session replaced");
+  }
+
+  if (!verification.ok && verification.reason === "unavailable") {
+    throw new Error("Authentication service unavailable");
+  }
+
+  if (!verification.ok) {
     throw new Error("Unauthorized: Invalid or expired token");
   }
+
+  const identity = verification.identity;
 
   await initializeDatabase();
 
@@ -59,6 +70,14 @@ export async function authenticateAccountRequest(
 }
 
 export function statusForAccountAuthError(message: string): number {
+  if (message === "Session replaced") {
+    return 409;
+  }
+
+  if (message === "Authentication service unavailable") {
+    return 503;
+  }
+
   if (message.startsWith("Unauthorized:")) {
     return 401;
   }

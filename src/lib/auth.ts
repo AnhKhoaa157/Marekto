@@ -16,6 +16,7 @@ const JWT_EXPIRATION = "7d";
 export type AuthTokenPayload = {
   userId: EntityId;
   workspaceId: EntityId | null;
+  sessionId: EntityId;
 };
 
 let cachedSecretKey: Uint8Array | null = null;
@@ -44,13 +45,21 @@ function isValidWorkspaceId(value: unknown): value is EntityId | null {
  * configured or either payload identifier is invalid.
  */
 export async function signJWT(payload: AuthTokenPayload): Promise<string> {
-  if (!isUuid(payload.userId) || !isValidWorkspaceId(payload.workspaceId)) {
+  if (
+    !isUuid(payload.userId) ||
+    !isValidWorkspaceId(payload.workspaceId) ||
+    !isUuid(payload.sessionId)
+  ) {
     throw new Error(
-      "Invalid JWT payload: userId must be a UUID and workspaceId must be a UUID or null",
+      "Invalid JWT payload: userId/sessionId must be UUIDs and workspaceId must be a UUID or null",
     );
   }
 
-  return new SignJWT({ userId: payload.userId, workspaceId: payload.workspaceId })
+  return new SignJWT({
+    userId: payload.userId,
+    workspaceId: payload.workspaceId,
+    sessionId: payload.sessionId,
+  })
     .setProtectedHeader({ alg: JWT_ALGORITHM })
     .setIssuedAt()
     .setIssuer(JWT_ISSUER)
@@ -76,13 +85,13 @@ export async function verifyJWT(token: string): Promise<AuthTokenPayload | null>
       audience: JWT_AUDIENCE,
     });
 
-    const { userId, workspaceId } = payload as Record<string, unknown>;
+    const { userId, workspaceId, sessionId } = payload as Record<string, unknown>;
 
-    if (!isUuid(userId) || !isValidWorkspaceId(workspaceId)) {
+    if (!isUuid(userId) || !isValidWorkspaceId(workspaceId) || !isUuid(sessionId)) {
       return null;
     }
 
-    return { userId, workspaceId };
+    return { userId, workspaceId, sessionId };
   } catch {
     return null;
   }

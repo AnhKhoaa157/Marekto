@@ -517,6 +517,14 @@ export function AuthForm({ mode, redirectTo }: Readonly<AuthFormProps>) {
         ) : (
           <div className="space-y-2">
             <p>
+              <Link
+                className="font-medium text-indigo-300 outline-none transition-colors hover:text-indigo-200 focus-visible:ring-2 focus-visible:ring-indigo-400"
+                href="/forgot-password"
+              >
+                Forgot password?
+              </Link>
+            </p>
+            <p>
               Need a workspace?{" "}
               <Link
                 className="font-medium text-indigo-300 outline-none transition-colors hover:text-indigo-200 focus-visible:ring-2 focus-visible:ring-indigo-400"

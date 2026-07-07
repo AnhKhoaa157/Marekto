@@ -6,6 +6,12 @@ type RegistrationOtpEmail = {
   expiresInMinutes: number;
 };
 
+type PasswordResetOtpEmail = {
+  email: string;
+  otp: string;
+  expiresInMinutes: number;
+};
+
 function escapeHtml(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -114,6 +120,74 @@ export async function sendRegistrationOtpEmail(
       html,
       text:
         `Your Marekto verification code is ${message.otp}. ` +
+        `It expires in ${message.expiresInMinutes} minutes.`,
+    },
+    transporter,
+    config,
+  );
+}
+
+export async function sendPasswordResetOtpEmail(
+  message: PasswordResetOtpEmail,
+  transporter?: MailTransporter,
+  config?: SmtpConfig,
+) {
+  const safeOtp = escapeHtml(message.otp);
+  const safeMinutes = escapeHtml(String(message.expiresInMinutes));
+  const safeEmail = escapeHtml(message.email);
+  const html = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark light">
+    <meta name="supported-color-schemes" content="dark light">
+    <title>Reset your Marekto password</title>
+    <style>
+      :root { color-scheme: dark light; supported-color-schemes: dark light; }
+      @media (prefers-color-scheme: dark) {
+        .email-page { background-color: #09090b !important; }
+        .email-card { background-color: #18181b !important; }
+        .email-header { background-color: #312e81 !important; }
+        .email-code { background-color: #0f1022 !important; }
+        .email-title, .email-code-value { color: #ffffff !important; }
+        .email-copy { color: #d4d4d8 !important; }
+      }
+    </style>
+  </head>
+  <body class="email-page" style="margin:0;padding:0;background-color:#09090b;font-family:Inter,Segoe UI,Arial,sans-serif;color:#f4f4f5;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
+      Your Marekto password reset code is ${safeOtp}.
+    </div>
+    <table class="email-page" role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#09090b" style="background-color:#09090b;margin:0;padding:32px 16px;">
+      <tr><td align="center">
+        <table class="email-card" role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#18181b" style="max-width:560px;border-collapse:separate;border-spacing:0;background-color:#18181b;border:1px solid #27272a;border-radius:18px;overflow:hidden;">
+          <tr><td class="email-header" bgcolor="#312e81" style="padding:28px;background-color:#312e81;">
+            <p style="margin:0;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#e0e7ff;">Marekto account security</p>
+            <h1 class="email-title" style="margin:14px 0 0;font-size:28px;line-height:1.2;color:#ffffff;font-weight:800;letter-spacing:0;">Reset your password</h1>
+            <p class="email-copy" style="margin:10px 0 0;font-size:15px;line-height:1.6;color:#e4e4e7;">Use this one-time code to choose a new password.</p>
+          </td></tr>
+          <tr><td style="padding:28px;">
+            <p class="email-copy" style="margin:0;font-size:14px;line-height:1.6;color:#d4d4d8;">A password reset was requested for <strong style="color:#ffffff;">${safeEmail}</strong>.</p>
+            <div class="email-code" style="margin:22px 0;padding:22px;border:1px solid #6366f1;border-radius:16px;background-color:#0f1022;text-align:center;">
+              <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.12em;color:#a5b4fc;font-weight:800;">Password reset code</div>
+              <div class="email-code-value" style="margin-top:12px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:38px;line-height:1.1;letter-spacing:0.18em;color:#ffffff;font-weight:900;">${safeOtp}</div>
+            </div>
+            <p class="email-copy" style="margin:0;font-size:14px;line-height:1.7;color:#d4d4d8;">This code expires in <strong style="color:#ffffff;">${safeMinutes} minutes</strong>. If you did not request a reset, ignore this email and your password will remain unchanged.</p>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>`;
+
+  return sendEmail(
+    {
+      to: message.email,
+      subject: "Reset your Marekto password",
+      html,
+      text:
+        `Your Marekto password reset code is ${message.otp}. ` +
         `It expires in ${message.expiresInMinutes} minutes.`,
     },
     transporter,

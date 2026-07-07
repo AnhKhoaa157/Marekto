@@ -177,6 +177,22 @@ export const openApiSpec = {
         },
         required: ["password"],
       },
+      ForgotPasswordRequest: {
+        type: "object",
+        properties: {
+          email: { type: "string", format: "email", example: "owner@acme.com" },
+        },
+        required: ["email"],
+      },
+      ResetPasswordRequest: {
+        type: "object",
+        properties: {
+          email: { type: "string", format: "email", example: "owner@acme.com" },
+          otp: { type: "string", pattern: "^[0-9]{6}$", example: "123456" },
+          password: { type: "string", format: "password", minLength: 6, maxLength: 128 },
+        },
+        required: ["email", "otp", "password"],
+      },
       CreateListRequest: {
         type: "object",
         properties: {
@@ -608,7 +624,7 @@ export const openApiSpec = {
         tags: ["Auth"],
         summary: "Clear the authentication cookie",
         description:
-          "Expires the auth_token cookie for browser sessions. Bearer tokens already issued remain valid until their normal JWT expiration.",
+          "Revokes the matching Redis-backed active session and expires the auth_token cookie. A stale device cannot revoke the newer active session.",
         security: [],
         responses: {
           "200": {
@@ -792,6 +808,66 @@ export const openApiSpec = {
               },
             },
           },
+        },
+      },
+    },
+    "/api/auth/forgot-password": {
+      post: {
+        tags: ["Auth"],
+        summary: "Request a password reset OTP",
+        description:
+          "Rate-limited request that returns the same accepted response whether or not the account exists, preventing email enumeration.",
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ForgotPasswordRequest" },
+            },
+          },
+        },
+        responses: {
+          "202": { description: "Reset request accepted." },
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "429": { description: "Too many reset requests." },
+          "500": { $ref: "#/components/responses/ServerError" },
+        },
+      },
+    },
+    "/api/auth/reset-password": {
+      post: {
+        tags: ["Auth"],
+        summary: "Reset a password with an emailed OTP",
+        description:
+          "Verifies the one-time code, changes the password, and invalidates every existing Redis-backed session for the account.",
+        security: [],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ResetPasswordRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Password reset and existing sessions revoked." },
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "500": { $ref: "#/components/responses/ServerError" },
+        },
+      },
+    },
+    "/api/auth/session": {
+      get: {
+        tags: ["Auth"],
+        summary: "Check the browser session",
+        description:
+          "Returns 409 with code session_replaced when another login has replaced this device's session.",
+        security: [],
+        responses: {
+          "200": { description: "No session or the current session is active." },
+          "401": { description: "The cookie is invalid or expired." },
+          "409": { description: "A newer login replaced this session." },
+          "503": { description: "Redis session verification is unavailable." },
         },
       },
     },

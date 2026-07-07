@@ -3,8 +3,9 @@ import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { type AuthTokenPayload, verifyJWT } from "@/lib/auth";
+import { type AuthTokenPayload } from "@/lib/auth";
 import { initializeDatabase, query } from "@/lib/db";
+import { verifyActiveJWT } from "@/lib/session-auth";
 
 const AUTH_COOKIE_NAME = "auth_token";
 const ADMIN_ROLE = "admin";
@@ -18,7 +19,7 @@ export async function getServerAuthSession(): Promise<AuthTokenPayload | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
 
-  return token ? verifyJWT(token) : null;
+  return token ? verifyActiveJWT(token) : null;
 }
 
 async function getSessionUserRole(userId: string): Promise<string | null> {

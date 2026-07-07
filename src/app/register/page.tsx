@@ -6,7 +6,7 @@ import { AuthForm } from "@/features/auth/components/auth-form";
 import { BackToHomeLink } from "@/components/brand/back-to-home-link";
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { Background3D } from "@/components/homepage/background-3d";
-import { verifyJWT } from "@/lib/auth";
+import { verifyActiveJWT } from "@/lib/session-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +20,7 @@ export const metadata = {
 async function redirectAuthenticatedUser() {
   const cookieStore = await cookies();
   const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-  const payload = token ? await verifyJWT(token) : null;
+  const payload = token ? await verifyActiveJWT(token) : null;
 
   if (payload) {
     redirect(payload.workspaceId ? "/dashboard" : "/onboarding/workspace");

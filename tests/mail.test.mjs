@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { sendRegistrationOtpEmail } from "../src/lib/mail/auth.ts";
+import {
+  sendPasswordResetOtpEmail,
+  sendRegistrationOtpEmail,
+} from "../src/lib/mail/auth.ts";
 
 import {
   isSmtpConfigured,
@@ -100,6 +103,35 @@ test("registration OTP email uses dark-mode-safe solid backgrounds", async () =>
   assert.match(sentMessage.html, /prefers-color-scheme: dark/);
   assert.match(sentMessage.html, /bgcolor="#312e81"/);
   assert.match(sentMessage.html, /background-color:#312e81/);
+  assert.doesNotMatch(sentMessage.html, /linear-gradient|rgba\(/);
+});
+
+test("password reset email carries the OTP without unsafe dark-mode gradients", async () => {
+  const config = resolveSmtpConfig(validSmtpEnv);
+  let sentMessage;
+  const transporter = {
+    async sendMail(options) {
+      sentMessage = options;
+      return {
+        messageId: "message-reset",
+        accepted: [options.to],
+        rejected: [],
+        pending: [],
+        response: "250 queued",
+        envelope: { from: "mailer@example.test", to: [options.to] },
+      };
+    },
+  };
+
+  await sendPasswordResetOtpEmail(
+    { email: "owner@example.test", otp: "654321", expiresInMinutes: 10 },
+    transporter,
+    config,
+  );
+
+  assert.equal(sentMessage.subject, "Reset your Marekto password");
+  assert.match(sentMessage.html, /654321/);
+  assert.match(sentMessage.html, /bgcolor="#312e81"/);
   assert.doesNotMatch(sentMessage.html, /linear-gradient|rgba\(/);
 });
 

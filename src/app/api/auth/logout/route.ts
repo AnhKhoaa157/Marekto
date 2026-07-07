@@ -1,12 +1,22 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+
+import { verifyJWT } from "@/lib/auth";
+import { revokeActiveSession } from "@/lib/session-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const AUTH_COOKIE_NAME = "auth_token";
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
+    const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
+    const identity = token ? await verifyJWT(token) : null;
+
+    if (identity) {
+      await revokeActiveSession(identity.userId, identity.sessionId);
+    }
+
     const response = NextResponse.json(
       { success: true, data: { authenticated: false } },
       { status: 200 },

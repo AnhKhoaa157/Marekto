@@ -13,6 +13,7 @@ function validProductionEnv(overrides = {}) {
     CRON_SECRET: STRONG_CRON,
     DATABASE_URL: "postgres://app:pw@db.internal:5432/marekto",
     DATABASE_SSL: "require",
+    REDIS_URL: "rediss://redis.internal:6379",
     SMTP_HOST: "smtp.example.com",
     SMTP_PORT: "587",
     SMTP_USER: "mailer",
@@ -95,6 +96,16 @@ test("unconfigured SMTP warns rather than crashing", () => {
   }
   const result = checkEnvironment(env, true);
   assert.ok(result.warnings.some((w) => w.includes("SMTP is not configured")));
+});
+
+test("production requires Redis for active-session enforcement", () => {
+  const missing = checkEnvironment(validProductionEnv({ REDIS_URL: undefined }), true);
+  assert.equal(missing.ok, false);
+  assert.ok(missing.errors.some((error) => error.includes("REDIS_URL is required")));
+
+  const invalid = checkEnvironment(validProductionEnv({ REDIS_URL: "https://redis" }), true);
+  assert.equal(invalid.ok, false);
+  assert.ok(invalid.errors.some((error) => error.includes("redis://")));
 });
 
 test("SMTP transport defaults alone still count as unconfigured", () => {

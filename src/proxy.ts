@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { verifyJWT } from "@/lib/auth";
 import { authenticateTenantRequest } from "@/lib/proxy-auth";
+import { verifySessionToken } from "@/lib/session-auth";
 
 /**
  * Intercepts tenant-scoped API routes, authenticates the caller via JWT, and
@@ -26,13 +26,20 @@ export default async function proxy(request: NextRequest) {
   const authentication = await authenticateTenantRequest(
     request.headers,
     request.cookies,
-    verifyJWT,
+    verifySessionToken,
   );
 
   if (!authentication.ok) {
     return NextResponse.json(
-      { success: false, error: authentication.error },
-      { status: 401 },
+      { success: false, error: authentication.error, code: authentication.code },
+      {
+        status:
+          authentication.code === "session_replaced"
+            ? 409
+            : authentication.code === "session_unavailable"
+              ? 503
+              : 401,
+      },
     );
   }
 

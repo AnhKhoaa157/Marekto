@@ -4,9 +4,13 @@ const BEARER_PREFIX = "Bearer ";
 type TenantIdentity = {
   userId: string;
   workspaceId: string | null;
+  sessionId: string;
 };
 
-type VerifyToken = (token: string) => Promise<TenantIdentity | null>;
+type VerifyToken = (token: string) => Promise<
+  | { ok: true; identity: TenantIdentity }
+  | { ok: false; reason: "invalid" | "replaced" | "unavailable" }
+>;
 
 export type TenantAuthenticationResult =
   | {
@@ -16,6 +20,7 @@ export type TenantAuthenticationResult =
     }
   | {
       ok: false;
+      code: "missing_token" | "invalid_token" | "session_replaced" | "session_unavailable" | "workspace_required";
       error: string;
     };
 
@@ -46,17 +51,39 @@ export async function authenticateTenantRequest(
   const token = extractToken(headers, cookies);
 
   if (!token) {
-    return { ok: false, error: "Unauthorized: Missing token" };
+    return { ok: false, code: "missing_token", error: "Unauthorized: Missing token" };
   }
 
-  const identity = await verifyToken(token);
+  const verification = await verifyToken(token);
 
-  if (!identity) {
-    return { ok: false, error: "Unauthorized: Invalid or expired token" };
+  if (!verification.ok) {
+    if (verification.reason === "replaced") {
+      return { ok: false, code: "session_replaced", error: "Session replaced" };
+    }
+
+    if (verification.reason === "unavailable") {
+      return {
+        ok: false,
+        code: "session_unavailable",
+        error: "Authentication service unavailable",
+      };
+    }
+
+    return {
+      ok: false,
+      code: "invalid_token",
+      error: "Unauthorized: Invalid or expired token",
+    };
   }
+
+  const identity = verification.identity;
 
   if (!identity.workspaceId) {
-    return { ok: false, error: "Unauthorized: Workspace required" };
+    return {
+      ok: false,
+      code: "workspace_required",
+      error: "Unauthorized: Workspace required",
+    };
   }
 
   const forwardedHeaders = new Headers(headers);

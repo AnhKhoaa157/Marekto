@@ -6,6 +6,7 @@ import {
 } from "@/lib/account-auth";
 import { signJWT } from "@/lib/auth";
 import { parseUuid } from "@/lib/identifiers";
+import { touchActiveSession } from "@/lib/session-store";
 import { assertUserCanUseWorkspace } from "@/lib/workspace-collaboration";
 
 export const runtime = "nodejs";
@@ -48,7 +49,14 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as SwitchWorkspaceBody;
     const workspaceId = parseUuid(body.workspaceId, "Workspace id");
     const workspace = await assertUserCanUseWorkspace(identity.userId, workspaceId);
-    const token = await signJWT({ userId: identity.userId, workspaceId });
+    if (!(await touchActiveSession(identity.userId, identity.sessionId))) {
+      throw new Error("Session replaced");
+    }
+    const token = await signJWT({
+      userId: identity.userId,
+      workspaceId,
+      sessionId: identity.sessionId,
+    });
     const response = NextResponse.json({
       success: true,
       data: { workspace, token, workspaceId },

@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { signJWT } from "@/lib/auth";
 import { initializeDatabase, query } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
+import { createActiveSession } from "@/lib/session-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,9 +81,11 @@ export async function POST(request: NextRequest) {
       throw new Error("Invalid credentials");
     }
 
+    const sessionId = await createActiveSession(row.user_id);
     const token = await signJWT({
       userId: row.user_id,
       workspaceId: row.workspace_id,
+      sessionId,
     });
 
     const response = NextResponse.json(

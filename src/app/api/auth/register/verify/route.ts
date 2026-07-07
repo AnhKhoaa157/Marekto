@@ -11,6 +11,7 @@ import {
   EMAIL_TAKEN_ERROR,
   runRegistrationTransaction,
 } from "@/lib/registration";
+import { createActiveSession } from "@/lib/session-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -117,7 +118,8 @@ export async function POST(request: NextRequest) {
       console.error("Failed to clean verified registration OTP:", cleanupError);
     });
 
-    const token = await signJWT({ userId, workspaceId });
+    const sessionId = await createActiveSession(userId);
+    const token = await signJWT({ userId, workspaceId, sessionId });
     const nextPath = workspaceId ? "/dashboard" : "/onboarding/workspace";
 
     const response = NextResponse.json(

@@ -6,6 +6,8 @@ const OTP_MAX = 10 ** OTP_LENGTH;
 
 export const REGISTRATION_OTP_TTL_SECONDS = 10 * 60;
 export const MAX_REGISTRATION_OTP_ATTEMPTS = 5;
+export const PASSWORD_RESET_OTP_TTL_SECONDS = 10 * 60;
+export const MAX_PASSWORD_RESET_OTP_ATTEMPTS = 5;
 
 export function resolveDevelopmentRegistrationOtp(
   env: NodeJS.ProcessEnv = process.env,
@@ -22,6 +24,26 @@ export function resolveDevelopmentRegistrationOtp(
 
   if (!/^\d{6}$/.test(otp)) {
     throw new Error("REGISTRATION_DEV_OTP must be a 6-digit code");
+  }
+
+  return otp;
+}
+
+export function resolveDevelopmentPasswordResetOtp(
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  if (env.NODE_ENV === "production") {
+    return null;
+  }
+
+  const otp = env.PASSWORD_RESET_DEV_OTP?.trim();
+
+  if (!otp) {
+    return null;
+  }
+
+  if (!/^\d{6}$/.test(otp)) {
+    throw new Error("PASSWORD_RESET_DEV_OTP must be a 6-digit code");
   }
 
   return otp;

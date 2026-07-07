@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { SessionReplacedGuard } from "@/features/auth/components/session-replaced-guard";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -29,6 +30,7 @@ export default function RootLayout({
     >
       <body className="flex min-h-full flex-col bg-zinc-950 text-zinc-50">
         {children}
+        <SessionReplacedGuard />
       </body>
     </html>
   );

@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { signJWT } from "@/lib/auth";
 import { initializeDatabase, query } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
+import { createActiveSession } from "@/lib/session-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -91,7 +92,8 @@ export async function POST(request: NextRequest) {
     const userId = row.user_id;
     const workspaceId = row.workspace_id;
 
-    const token = await signJWT({ userId, workspaceId });
+    const sessionId = await createActiveSession(userId);
+    const token = await signJWT({ userId, workspaceId, sessionId });
     const nextPath = workspaceId ? "/dashboard" : "/onboarding/workspace";
 
     const response = NextResponse.json(

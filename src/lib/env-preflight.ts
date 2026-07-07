@@ -133,6 +133,30 @@ function checkDatabase(env: PreflightEnv, isProduction: boolean, result: Preflig
   }
 }
 
+function checkRedis(env: PreflightEnv, isProduction: boolean, result: PreflightResult): void {
+  const value = env.REDIS_URL?.trim();
+
+  if (!value) {
+    const message =
+      "REDIS_URL is required for single-session enforcement and authentication rate limits.";
+    if (isProduction) {
+      result.errors.push(message);
+    } else {
+      result.warnings.push(message);
+    }
+    return;
+  }
+
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "redis:" && url.protocol !== "rediss:") {
+      result.errors.push("REDIS_URL must use the redis:// or rediss:// protocol.");
+    }
+  } catch {
+    result.errors.push("REDIS_URL is not a valid connection URL.");
+  }
+}
+
 function checkSmtp(env: PreflightEnv, isProduction: boolean, result: PreflightResult): void {
   const smtpConnectionKeys = ["SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"];
   const anySet = smtpConnectionKeys.some(
@@ -199,6 +223,7 @@ export function checkEnvironment(
   checkAuth(env, isProduction, result);
   checkCron(env, isProduction, result);
   checkDatabase(env, isProduction, result);
+  checkRedis(env, isProduction, result);
   checkSmtp(env, isProduction, result);
   checkGemini(env, isProduction, result);
 

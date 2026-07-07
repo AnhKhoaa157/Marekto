@@ -5,6 +5,7 @@ import {
   generateRegistrationOtp,
   hashOtp,
   normalizeOtp,
+  resolveDevelopmentPasswordResetOtp,
   resolveDevelopmentRegistrationOtp,
   verifyOtp,
 } from "../src/lib/auth-otp.ts";
@@ -16,6 +17,23 @@ test("generates and verifies 6-digit registration OTPs", () => {
   assert.match(otp, /^\d{6}$/);
   assert.equal(verifyOtp(otp, hash), true);
   assert.equal(verifyOtp("000000", hash), false);
+});
+
+test("development password reset OTP is disabled in production", () => {
+  assert.equal(
+    resolveDevelopmentPasswordResetOtp({
+      NODE_ENV: "development",
+      PASSWORD_RESET_DEV_OTP: " 654321 ",
+    }),
+    "654321",
+  );
+  assert.equal(
+    resolveDevelopmentPasswordResetOtp({
+      NODE_ENV: "production",
+      PASSWORD_RESET_DEV_OTP: "654321",
+    }),
+    null,
+  );
 });
 
 test("uses a configured registration OTP outside production only", () => {

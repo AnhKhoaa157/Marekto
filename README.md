@@ -159,18 +159,41 @@ Segmentation cache fallback is exact-match and workspace-scoped. Personalization
 - Campaigns are marked sent only from confirmed delivery outcomes.
 - Secrets and raw provider errors are sanitized before logging.
 
-## Technology
+## Technology Stack & Implementation Details
 
-| Layer | Stack |
-| --- | --- |
-| Web application | Next.js App Router, React, Tailwind CSS |
-| Language | TypeScript in strict mode |
-| Database | PostgreSQL, raw parameterized SQL, JSONB, Row-Level Security |
-| AI | Gemini 2.5 Flash with structured JSON responses |
-| Email | Nodemailer over SMTP |
-| Scheduling | Authenticated cron-compatible worker route |
-| API reference | OpenAPI and Swagger UI at `/api-docs` |
-| Tests | Node.js test runner with TypeScript type stripping |
+Marekto is built with a modern, strict, and scalable technology stack, emphasizing tenant safety, performance, and AI integration.
+
+### Core Stack
+- **Framework**: Next.js 16 (App Router) - All API logic lives in `route.ts` Route Handlers running in the `nodejs` runtime with `force-dynamic`.
+- **UI Library**: React 19
+- **Styling**: Tailwind CSS v4
+- **Language**: TypeScript (Strict Mode) - Explicit types for rows and payloads; no implicit/unsafe `any`.
+
+### Database & Storage
+- **Database**: PostgreSQL 16
+- **Architecture**: Direct `pg` connection pool (No ORM used).
+- **Multi-tenancy**: Native Row-Level Security (RLS) enforcing workspace boundaries at the database level.
+- **Querying**: Raw parameterized SQL (`$1`, `$2`) to prevent injection. Never string-interpolated values.
+- **JSONB**: Heavily utilizing `JSONB` for dynamic, evolving marketing attributes (e.g., `contacts.properties`, `campaigns.target_filters`) with GIN indexing for fast retrieval.
+
+### Infrastructure & Migrations
+- **Schema Management**: Managed via **Flyway** (`db/migrations`). Migrations are strictly idempotent and handled securely outside the application runtime during deployment.
+- **Session State**: **Redis** is utilized for highly available, single-session enforcement across devices, session invalidation, and to provide reliable authentication rate limits.
+
+### AI Integration
+- **Engine**: Google Gemini 2.5 Flash
+- **Usage**:
+  - **Smart Segmentation**: Translating natural-language audience requests into structured, validated JSON filters.
+  - **Email Personalization**: Generating per-contact customized email content at send time based on real contact metadata.
+- **Reliability**: Uses tenant-scoped exact-match caching for segmentation and falls back to original real template HTML for personalization if the AI provider is unavailable.
+
+### Background Automation & Delivery
+- **Scheduler**: **node-cron** handles the background execution loops, invoking an authenticated worker endpoint that claims scheduled campaigns atomically and protects against duplicate-sends via stale-claim recovery.
+- **Email Delivery**: **Nodemailer** over real SMTP. Delivery outcomes (success/fail) are recorded accurately per recipient into `"Email_logs"`.
+
+### Security & Authentication
+- **Auth**: Custom JWT-based authentication proxy layer verified against Redis session states.
+- **Workspace Context**: Tenant context is resolved from the JWT, ensuring the browser cannot manipulate workspace IDs. Tenant-scoped database access strictly runs through a `withWorkspace(workspaceId, ...)` helper to guarantee RLS application.
 
 ## Quick start
 
@@ -188,7 +211,7 @@ Create `.env` in the project root. Never commit real credentials.
 
 ```dotenv
 # Required application infrastructure
-DATABASE_URL=postgresql://postgres:password@localhost:5432/marekto
+DATABASE_URL=postgresql://postgres:password@localhost:5434/marekto
 JWT_SECRET=replace-with-a-long-random-secret
 
 # Database transport (optional locally)
@@ -226,7 +249,7 @@ Open [http://localhost:3000](http://localhost:3000). Interactive API documentati
 The repository includes a Docker Compose setup for local development:
 
 - `web`: Next.js app on port `3000`
-- `postgres`: PostgreSQL 16 on port `5432`
+- `postgres`: PostgreSQL 16 on port `5434`
 - `flyway`: applies `db/migrations` before the web app starts
 - `data-intelligence`: internal FastAPI service on port `8080`
 

@@ -11,10 +11,10 @@ import {
   type AdminSessionContext,
   type AdminUserRecord,
 } from "@/lib/admin-auth";
-import { verifyJWT } from "@/lib/auth";
 import { initializeDatabase, query } from "@/lib/db";
 import { authenticateTenantRequest } from "@/lib/proxy-auth";
 import { getServerAuthSession } from "@/lib/server-auth";
+import { verifySessionToken } from "@/lib/session-auth";
 
 /**
  * Server-side wiring for admin authorization. Reads the verified session, looks
@@ -34,7 +34,7 @@ async function readApiSession(
   const authentication = await authenticateTenantRequest(
     request.headers,
     request.cookies,
-    verifyJWT,
+    verifySessionToken,
   );
 
   if (!authentication.ok || !authentication.identity.workspaceId) {

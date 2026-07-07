@@ -6,10 +6,11 @@ import { pathToFileURL } from "node:url";
 
 import { SignJWT } from "jose";
 
-import { USER_ID, WORKSPACE_ID } from "./test-ids.mjs";
+import { SESSION_ID, USER_ID, WORKSPACE_ID } from "./test-ids.mjs";
 
 const DB_STUB_URL = "marekto-test:members-db-stub";
 const COLLABORATION_STUB_URL = "marekto-test:members-collaboration-stub";
+const SESSION_AUTH_STUB_URL = "marekto-test:members-session-auth-stub";
 const SRC_ROOT = path.resolve(import.meta.dirname, "..", "src");
 
 process.env.JWT_SECRET = "workspace-members-route-test-secret";
@@ -53,6 +54,17 @@ export async function listWorkspaceMembers(actorUserId, workspaceId) {
 }
 `;
 
+const SESSION_AUTH_STUB_SOURCE = `
+import { verifyJWT } from ${JSON.stringify(pathToFileURL(path.join(SRC_ROOT, "lib", "auth.ts")).href)};
+
+export async function verifySessionToken(token) {
+  const identity = await verifyJWT(token);
+  return identity
+    ? { ok: true, identity }
+    : { ok: false, reason: "invalid" };
+}
+`;
+
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "@/lib/db") {
@@ -61,6 +73,10 @@ registerHooks({
 
     if (specifier === "@/lib/workspace-collaboration") {
       return { url: COLLABORATION_STUB_URL, shortCircuit: true };
+    }
+
+    if (specifier === "@/lib/session-auth") {
+      return { url: SESSION_AUTH_STUB_URL, shortCircuit: true };
     }
 
     if (specifier.startsWith("@/")) {
@@ -87,6 +103,11 @@ registerHooks({
         source: COLLABORATION_STUB_SOURCE,
         shortCircuit: true,
       };
+    }
+
+
+    if (url === SESSION_AUTH_STUB_URL) {
+      return { format: "module", source: SESSION_AUTH_STUB_SOURCE, shortCircuit: true };
     }
 
     return nextLoad(url, context);
@@ -133,7 +154,7 @@ async function signRawToken(payload, options = {}) {
 
 test("returns members for a valid UUID session and passes ids as strings", async () => {
   resetStub();
-  const token = await signJWT({ userId: USER_ID, workspaceId: WORKSPACE_ID });
+  const token = await signJWT({ userId: USER_ID, workspaceId: WORKSPACE_ID, sessionId: SESSION_ID });
 
   const response = await GET(buildRequest(token));
   const payload = await response.json();
@@ -191,7 +212,7 @@ test("rejects a missing session with 401", async () => {
 
 test("rejects a session without workspace context with 400", async () => {
   resetStub();
-  const token = await signJWT({ userId: USER_ID, workspaceId: null });
+  const token = await signJWT({ userId: USER_ID, workspaceId: null, sessionId: SESSION_ID });
 
   const response = await GET(buildRequest(token));
   const payload = await response.json();
@@ -204,7 +225,7 @@ test("rejects a session without workspace context with 400", async () => {
 test("maps owner-only access to 403 for non-owner members", async () => {
   resetStub();
   stubState.listError = new Error("Forbidden: workspace owner access required");
-  const token = await signJWT({ userId: USER_ID, workspaceId: WORKSPACE_ID });
+  const token = await signJWT({ userId: USER_ID, workspaceId: WORKSPACE_ID, sessionId: SESSION_ID });
 
   const response = await GET(buildRequest(token));
   const payload = await response.json();

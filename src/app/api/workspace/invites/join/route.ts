@@ -5,6 +5,7 @@ import {
   statusForAccountAuthError,
 } from "@/lib/account-auth";
 import { signJWT } from "@/lib/auth";
+import { touchActiveSession } from "@/lib/session-store";
 import {
   limitErrorResponse,
   PlanLimitExceededError,
@@ -71,9 +72,13 @@ export async function POST(request: NextRequest) {
       userId: identity.userId,
       token: parseWorkspaceInviteToken(body.token),
     });
+    if (!(await touchActiveSession(identity.userId, identity.sessionId))) {
+      throw new Error("Session replaced");
+    }
     const token = await signJWT({
       userId: identity.userId,
       workspaceId: workspace.id,
+      sessionId: identity.sessionId,
     });
     const response = NextResponse.json({
       success: true,
