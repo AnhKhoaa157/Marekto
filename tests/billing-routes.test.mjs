@@ -47,9 +47,11 @@ export class BillingError extends Error {
 export async function createBillingCheckout(input) {
   state.checkoutCalls.push(input);
   if (state.checkoutError) throw state.checkoutError;
+  const checkoutUrl = "http://localhost:3000/settings/billing?mock_order=order";
   return {
-    checkoutUrl: "http://localhost:3000/settings/billing?mock_order=order",
+    checkoutUrl,
     order: { id: "order-id", plan_code: input.plan, status: "pending" },
+    redirect: { kind: "url", url: checkoutUrl },
   };
 }
 

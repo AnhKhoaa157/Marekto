@@ -137,7 +137,25 @@ function PlanCard({
   );
 }
 
-export default async function BillingSettingsPage() {
+function sepayReturnMessage(value: string | undefined): string | null {
+  if (value === "success") {
+    return "Thanks — we received your return from SePay. Your plan activates only after SePay confirms the payment, which can take a moment. This page reflects the verified status.";
+  }
+  if (value === "cancel") {
+    return "You canceled the SePay checkout. No payment was taken and your plan is unchanged.";
+  }
+  if (value === "error") {
+    return "The SePay checkout reported an error. No plan change was made. You can try upgrading again.";
+  }
+  return null;
+}
+
+export default async function BillingSettingsPage({
+  searchParams,
+}: Readonly<{ searchParams: Promise<Record<string, string | string[] | undefined>> }>) {
+  const params = await searchParams;
+  const sepayReturn = typeof params.sepay === "string" ? params.sepay : undefined;
+  const returnMessage = sepayReturnMessage(sepayReturn);
   const session = await requireServerWorkspaceSession();
   const workspace = await assertUserCanUseWorkspace(
     session.userId,
@@ -171,6 +189,15 @@ export default async function BillingSettingsPage() {
         </section>
       ) : (
         <div className="space-y-6">
+          {returnMessage ? (
+            <section
+              className="rounded-md border border-sky-900 bg-sky-950/40 p-4"
+              role="status"
+            >
+              <p className="text-sm leading-6 text-sky-200">{returnMessage}</p>
+            </section>
+          ) : null}
+
           <section className="rounded-md border border-zinc-800 bg-zinc-900 p-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
@@ -183,7 +210,10 @@ export default async function BillingSettingsPage() {
                 <p className="mt-2 text-sm leading-6 text-zinc-400">
                   Usage is measured from real workspace activity. Provider:{" "}
                   <span className="font-medium text-zinc-200">
-                    {overview.provider}
+                    {overview.provider === "sepay" &&
+                    overview.providerEnvironment === "sandbox"
+                      ? "SePay Sandbox"
+                      : overview.provider}
                   </span>
                   .
                 </p>
@@ -207,11 +237,10 @@ export default async function BillingSettingsPage() {
                 {overview.pendingOrders.map((order) => (
                   <p className="text-sm leading-6 text-amber-200" key={order.id}>
                     {resolvePlanName(overview.plans, order.plan_code)} order{" "}
-                    {formatEntityCode("PO", order.id)} is pending via{" "}
-                    {order.provider}.{" "}
-                    {order.provider === "sepay" && order.provider_order_id
-                      ? `Transfer with content ${order.provider_order_id}, then send the SePay sandbox webhook.`
-                      : "In mock mode, complete it by sending a signed mock webhook."}
+                    {formatEntityCode("PO", order.id)} is awaiting payment
+                    confirmation via {order.provider}. Your plan activates only
+                    after the payment is verified; refresh this page to check the
+                    latest status.
                   </p>
                 ))}
               </div>

@@ -135,6 +135,61 @@ test("a missing Gemini key warns without failing", () => {
   assert.ok(result.warnings.some((w) => w.includes("GEMINI_API_KEY is not set")));
 });
 
+test("SePay billing with complete credentials passes preflight", () => {
+  const result = checkEnvironment(
+    validProductionEnv({
+      BILLING_PROVIDER: "sepay",
+      SEPAY_ENV: "sandbox",
+      SEPAY_MERCHANT_ID: "MERCHANT_PROD",
+      SEPAY_SECRET_KEY: "sepay-secret",
+      SEPAY_IPN_SECRET: "sepay-ipn-secret",
+    }),
+    true,
+  );
+  assert.equal(result.ok, true, JSON.stringify(result.errors));
+});
+
+test("SePay billing fails in production when credentials are missing", () => {
+  const result = checkEnvironment(
+    validProductionEnv({ BILLING_PROVIDER: "sepay", SEPAY_ENV: "sandbox" }),
+    true,
+  );
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((e) => e.includes("SePay billing is selected")));
+});
+
+test("SePay billing only warns about missing credentials in development", () => {
+  const result = checkEnvironment(
+    { JWT_SECRET: STRONG_JWT, DATABASE_URL: "postgres://localhost:5432/dev", BILLING_PROVIDER: "sepay", SEPAY_ENV: "sandbox" },
+    false,
+  );
+  assert.ok(result.warnings.some((w) => w.includes("SePay billing is selected")));
+  assert.ok(!result.errors.some((e) => e.includes("SePay billing is selected")));
+});
+
+test("an invalid SEPAY_ENV fails when SePay is selected", () => {
+  const result = checkEnvironment(
+    validProductionEnv({
+      BILLING_PROVIDER: "sepay",
+      SEPAY_ENV: "staging",
+      SEPAY_MERCHANT_ID: "M",
+      SEPAY_SECRET_KEY: "s",
+      SEPAY_IPN_SECRET: "i",
+    }),
+    true,
+  );
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((e) => e.includes("SEPAY_ENV must be")));
+});
+
+test("deprecated SEPAY_SANDBOX/SEPAY_WEBHOOK_SECRET are surfaced as warnings", () => {
+  const result = checkEnvironment(
+    validProductionEnv({ SEPAY_SANDBOX: "true" }),
+    true,
+  );
+  assert.ok(result.warnings.some((w) => w.includes("deprecated")));
+});
+
 test("assertEnvironment throws a secret-free error listing every problem", () => {
   assert.throws(
     () =>

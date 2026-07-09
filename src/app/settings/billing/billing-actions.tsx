@@ -5,14 +5,42 @@ import { useState } from "react";
 import { ApiRequestError, requestApi } from "@/lib/client-api";
 import type { CheckoutPlanCode, PaymentOrder } from "@/lib/billing";
 
+type CheckoutForm = {
+  action: string;
+  method: "POST";
+  fields: Record<string, string>;
+};
+
 type CheckoutResponse = {
   url: string;
   order: PaymentOrder;
+  form: CheckoutForm | null;
 };
 
 type PortalResponse = {
   url: string;
 };
+
+function parseCheckoutForm(value: unknown): CheckoutForm | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+
+  const data = value as Record<string, unknown>;
+  const action = typeof data.action === "string" ? data.action : "";
+  const fields = data.fields;
+
+  if (!action || typeof fields !== "object" || fields === null || Array.isArray(fields)) {
+    return null;
+  }
+
+  const stringFields: Record<string, string> = {};
+  for (const [key, fieldValue] of Object.entries(fields as Record<string, unknown>)) {
+    if (typeof fieldValue === "string") stringFields[key] = fieldValue;
+  }
+
+  return { action, method: "POST", fields: stringFields };
+}
 
 function parseCheckoutResponse(value: unknown): CheckoutResponse {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -26,7 +54,32 @@ function parseCheckoutResponse(value: unknown): CheckoutResponse {
     throw new Error("Invalid checkout response");
   }
 
-  return data as CheckoutResponse;
+  return {
+    url,
+    order: data.order as PaymentOrder,
+    form: parseCheckoutForm(data.form),
+  };
+}
+
+/**
+ * SePay hosted checkout requires a signed HTML form POST. Build a transient
+ * off-DOM form and submit it so the browser navigates to SePay's checkout page.
+ */
+function submitCheckoutForm(form: CheckoutForm): void {
+  const element = document.createElement("form");
+  element.method = form.method;
+  element.action = form.action;
+
+  for (const [key, value] of Object.entries(form.fields)) {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = key;
+    input.value = value;
+    element.appendChild(input);
+  }
+
+  document.body.appendChild(element);
+  element.submit();
 }
 
 function parsePortalResponse(value: unknown): PortalResponse {
@@ -67,6 +120,10 @@ export function BillingCheckoutButton({
         },
         parseCheckoutResponse,
       );
+      if (checkout.form) {
+        submitCheckoutForm(checkout.form);
+        return;
+      }
       window.location.href = checkout.url;
     } catch (checkoutError) {
       const message =

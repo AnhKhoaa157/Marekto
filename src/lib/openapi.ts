@@ -395,9 +395,22 @@ export const openApiSpec = {
               url: {
                 type: "string",
                 format: "uri",
-                description: "Provider checkout URL or mock checkout URL.",
+                description:
+                  "Provider checkout URL (mock) or the SePay checkout init endpoint.",
               },
               order: { type: "object" },
+              form: {
+                type: "object",
+                nullable: true,
+                description:
+                  "Present for providers requiring a signed HTML form POST (SePay). The browser auto-submits it. Includes the HMAC signature (safe to expose) but never the secret key.",
+                properties: {
+                  action: { type: "string", format: "uri" },
+                  method: { type: "string", enum: ["POST"] },
+                  fields: { type: "object", additionalProperties: { type: "string" } },
+                },
+                required: ["action", "method", "fields"],
+              },
             },
             required: ["url", "order"],
           },
@@ -413,6 +426,12 @@ export const openApiSpec = {
             properties: {
               provider: { type: "string", enum: ["mock", "stripe", "sepay"] },
               providerConfigured: { type: "boolean" },
+              providerEnvironment: {
+                type: "string",
+                nullable: true,
+                enum: ["sandbox", "production", null],
+                description: "SePay environment label, or null when not applicable.",
+              },
               plans: { type: "array", items: { type: "object" } },
               subscription: { type: "object" },
               pendingOrders: { type: "array", items: { type: "object" } },
@@ -421,6 +440,7 @@ export const openApiSpec = {
             required: [
               "provider",
               "providerConfigured",
+              "providerEnvironment",
               "plans",
               "subscription",
               "pendingOrders",
@@ -462,23 +482,41 @@ export const openApiSpec = {
       SepayWebhookRequest: {
         type: "object",
         description:
-          "SePay bank transaction webhook payload. In sandbox, include the Marekto payment code (MKT...) in code, content, or description.",
+          "Official SePay Payment Gateway IPN payload. Authenticated with the X-Secret-Key header (compared constant-time to SEPAY_IPN_SECRET). Only notification_type=ORDER_PAID with order.order_status=CAPTURED and transaction.transaction_status=APPROVED activates entitlement, and only when order.order_invoice_number, order.order_amount, and order.order_currency match the stored order.",
         properties: {
-          id: { oneOf: [{ type: "integer" }, { type: "string" }] },
-          gateway: { type: "string", example: "Vietcombank" },
-          transactionDate: { type: "string", example: "2026-07-07 11:08:33" },
-          accountNumber: { type: "string" },
-          code: { type: "string", example: "MKT123456789ABC" },
-          content: {
+          timestamp: { type: "integer", example: 1757058220 },
+          notification_type: {
             type: "string",
-            example: "MKT123456789ABC chuyen tien",
+            enum: ["ORDER_PAID", "TRANSACTION_VOID"],
+            example: "ORDER_PAID",
           },
-          transferType: { type: "string", enum: ["in", "out"], example: "in" },
-          transferAmount: { type: "integer", example: 99000 },
-          accumulated: { type: "integer" },
-          referenceCode: { type: "string", example: "FT24012345678" },
+          order: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              order_id: { type: "string" },
+              order_status: { type: "string", example: "CAPTURED" },
+              order_currency: { type: "string", example: "VND" },
+              order_amount: { type: "string", example: "99000.00" },
+              order_invoice_number: { type: "string", example: "MKT123456789ABCDEF..." },
+              order_description: { type: "string" },
+            },
+            required: ["order_invoice_number", "order_status", "order_amount", "order_currency"],
+          },
+          transaction: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              transaction_id: { type: "string" },
+              transaction_type: { type: "string", example: "PAYMENT" },
+              transaction_status: { type: "string", example: "APPROVED" },
+              transaction_amount: { type: "string", example: "99000" },
+              transaction_currency: { type: "string", example: "VND" },
+              payment_method: { type: "string", example: "CARD" },
+            },
+          },
         },
-        required: ["id", "transferType", "transferAmount"],
+        required: ["notification_type", "order"],
         additionalProperties: true,
       },
     },
@@ -971,8 +1009,18 @@ export const openApiSpec = {
         tags: ["Billing"],
         summary: "Receive provider billing webhooks",
         description:
-          "Provider-facing endpoint. Mock verifies x-marekto-billing-signature and processes payment_order.paid/payment_order.failed. SePay sandbox accepts a bank transaction webhook, matches the MKT... payment code in code/content/description, and marks the order paid when transferType is in and transferAmount covers the order.",
+          "Provider-facing endpoint. Mock verifies x-marekto-billing-signature and processes payment_order.paid/payment_order.failed. SePay verifies the X-Secret-Key header (constant-time) and processes the official Payment Gateway IPN: an ORDER_PAID event with CAPTURED/APPROVED state, matching invoice number, and exact amount/currency activates one entitlement period. Duplicate events return 200 without double-activating; wrong secret, amount, invoice, or unsupported states never activate.",
         security: [],
+        parameters: [
+          {
+            name: "X-Secret-Key",
+            in: "header",
+            required: false,
+            schema: { type: "string" },
+            description:
+              "SePay IPN authentication secret (compared constant-time to SEPAY_IPN_SECRET). Required for the SePay provider.",
+          },
+        ],
         requestBody: {
           required: true,
           content: {

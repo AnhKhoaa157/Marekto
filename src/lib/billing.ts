@@ -10,6 +10,29 @@ import {
 } from "./entitlements.ts";
 import { isUuid } from "./identifiers.ts";
 import { assertUserCanUseWorkspace } from "./workspace-collaboration.ts";
+import { BillingError } from "./billing/errors.ts";
+import {
+  isSepayConfigured,
+  parseSepayConfig,
+  tryParseSepayConfig,
+} from "./billing/providers/config.ts";
+import {
+  buildMockCheckout,
+  isMockConfigured,
+  verifyAndParseMockWebhook,
+} from "./billing/providers/mock.ts";
+import {
+  buildSepayCheckout,
+  querySepayOrder,
+  verifyAndParseSepayWebhook,
+} from "./billing/providers/sepay.ts";
+import type {
+  NormalizedWebhookEvent,
+  ProviderCheckout,
+  ProviderCheckoutRedirect,
+} from "./billing/providers/types.ts";
+
+export { BillingError };
 
 export type BillingProviderCode = "mock" | "stripe" | "sepay";
 export type CheckoutPlanCode = Exclude<PlanCode, "free">;
@@ -63,10 +86,18 @@ export type WorkspaceSubscription = {
 export type BillingOverview = {
   provider: BillingProviderCode;
   providerConfigured: boolean;
+  /** Provider environment label, e.g. "sandbox" for SePay; null when not applicable. */
+  providerEnvironment: string | null;
   plans: BillingPlan[];
   subscription: WorkspaceSubscription;
   pendingOrders: PaymentOrder[];
   usage: Awaited<ReturnType<typeof getWorkspaceUsageOverview>>;
+};
+
+export type BillingCheckout = {
+  order: PaymentOrder;
+  checkoutUrl: string;
+  redirect: ProviderCheckoutRedirect;
 };
 
 type PaymentOrderRow = QueryResultRow & {
@@ -112,16 +143,6 @@ type BillingPlanRow = QueryResultRow & {
   limits: unknown;
   features: unknown;
 };
-
-export class BillingError extends Error {
-  readonly status: number;
-
-  constructor(message: string, status = 400) {
-    super(message);
-    this.name = "BillingError";
-    this.status = status;
-  }
-}
 
 export const BILLING_PLANS: Record<PlanCode, BillingPlan> = {
   free: {
@@ -290,23 +311,16 @@ function getAppBaseUrl(): string {
     : "http://localhost:3000";
 }
 
-function isSepaySandboxEnabled(): boolean {
-  return process.env.SEPAY_SANDBOX?.trim().toLowerCase() === "true";
-}
-
 function isProviderConfigured(provider: BillingProviderCode): boolean {
   if (provider === "mock") {
-    return process.env.NODE_ENV !== "production";
+    return isMockConfigured();
   }
 
   if (provider === "stripe") {
     return Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET);
   }
 
-  return (
-    (process.env.NODE_ENV !== "production" && isSepaySandboxEnabled()) ||
-    Boolean(process.env.SEPAY_WEBHOOK_SECRET)
-  );
+  return isSepayConfigured();
 }
 
 function mapPaymentOrder(row: PaymentOrderRow): PaymentOrder {
@@ -404,13 +418,12 @@ async function getBillingPlan(planCode: PlanCode): Promise<BillingPlan> {
   return plans.find((plan) => plan.code === planCode) ?? BILLING_PLANS[planCode];
 }
 
-function buildSepayPaymentCode(orderId: string): string {
-  return `MKT${orderId.replace(/-/g, "").slice(0, 12).toUpperCase()}`;
-}
-
-function buildCheckoutUrl(provider: BillingProviderCode, orderId: string): string {
-  const param = provider === "sepay" ? "sepay_order" : "mock_order";
-  return `${getAppBaseUrl()}/settings/billing?${param}=${orderId}`;
+/**
+ * Stable, unique invoice/order number derived from the Marekto payment order
+ * UUID. Stored on the order and used to match incoming SePay IPN events.
+ */
+function buildSepayInvoiceNumber(orderId: string): string {
+  return `MKT${orderId.replace(/-/g, "").toUpperCase()}`;
 }
 
 export async function getBillingOverview(input: {
@@ -423,10 +436,12 @@ export async function getBillingOverview(input: {
   await assertWorkspaceOwner(input.userId, input.workspaceId);
 
   const provider = getBillingProvider();
+  const sepayConfig = provider === "sepay" ? tryParseSepayConfig() : null;
 
   return {
     provider,
     providerConfigured: isProviderConfigured(provider),
+    providerEnvironment: sepayConfig?.env ?? null,
     plans: await getBillingPlanCatalog(),
     subscription: await readSubscription(input.workspaceId),
     pendingOrders: await readPendingOrders(input.workspaceId),
@@ -434,11 +449,36 @@ export async function getBillingOverview(input: {
   };
 }
 
+function buildProviderCheckout(input: {
+  provider: BillingProviderCode;
+  orderId: string;
+  planCode: CheckoutPlanCode;
+  planName: string;
+  amountCents: number;
+  currency: string;
+}): ProviderCheckout {
+  const checkoutInput = {
+    orderId: input.orderId,
+    planCode: input.planCode,
+    amountCents: input.amountCents,
+    currency: input.currency,
+    invoiceNumber: buildSepayInvoiceNumber(input.orderId),
+    description: `Marekto ${input.planName} plan (monthly)`,
+    appBaseUrl: getAppBaseUrl(),
+  };
+
+  if (input.provider === "sepay") {
+    return buildSepayCheckout(checkoutInput, parseSepayConfig());
+  }
+
+  return buildMockCheckout(checkoutInput);
+}
+
 export async function createBillingCheckout(input: {
   userId: string;
   workspaceId: string;
   plan: unknown;
-}): Promise<{ order: PaymentOrder; checkoutUrl: string }> {
+}): Promise<BillingCheckout> {
   assertUuid("userId", input.userId);
   assertUuid("workspaceId", input.workspaceId);
   await initializeDatabase();
@@ -473,22 +513,19 @@ export async function createBillingCheckout(input: {
         provider,
         plan.monthlyAmountCents,
         plan.currency,
-        JSON.stringify({
-          source: provider === "sepay" ? "sepay_sandbox_checkout" : "mock_checkout",
-        }),
+        JSON.stringify({ source: `${provider}_checkout` }),
       ],
     );
     const order = mapPaymentOrder(inserted.rows[0]);
-    const checkoutUrl = buildCheckoutUrl(provider, order.id);
-    const providerOrderId =
-      provider === "sepay" ? buildSepayPaymentCode(order.id) : `mock_${order.id}`;
-    const providerMetadata =
-      provider === "sepay"
-        ? {
-            sepay_payment_code: providerOrderId,
-            transfer_content: providerOrderId,
-          }
-        : { mock_order_id: providerOrderId };
+
+    const checkout = buildProviderCheckout({
+      provider,
+      orderId: order.id,
+      planCode,
+      planName: plan.name,
+      amountCents: order.amount_cents,
+      currency: order.currency,
+    });
 
     const updated = await client.query<PaymentOrderRow>(
       'UPDATE "Payment_orders" SET checkout_url = $1, provider_order_id = $2, ' +
@@ -496,152 +533,60 @@ export async function createBillingCheckout(input: {
         "WHERE id = $4 " +
         "RETURNING id, workspace_id, user_id, plan_code, provider, provider_order_id, checkout_url, " +
         "amount_cents, currency, status, expires_at, paid_at, created_at",
-      [checkoutUrl, providerOrderId, JSON.stringify(providerMetadata), order.id],
+      [
+        checkout.checkoutUrl,
+        checkout.providerOrderId,
+        JSON.stringify(checkout.safeMetadata),
+        order.id,
+      ],
     );
 
     return {
       order: mapPaymentOrder(updated.rows[0]),
-      checkoutUrl,
+      checkoutUrl: checkout.checkoutUrl,
+      redirect: checkout.redirect,
     };
   });
 }
 
-function parseMockWebhookPayload(bodyText: string): {
-  eventId: string;
-  eventType: "payment_order.paid" | "payment_order.failed";
-  orderId: string;
-} {
-  let parsed: unknown;
+const ORDER_COLUMNS =
+  "id, workspace_id, user_id, plan_code, provider, provider_order_id, checkout_url, " +
+  "amount_cents, currency, status, expires_at, paid_at, created_at";
 
-  try {
-    parsed = JSON.parse(bodyText);
-  } catch {
-    throw new BillingError("Webhook payload is invalid", 400);
-  }
-
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new BillingError("Webhook payload is invalid", 400);
-  }
-
-  const payload = parsed as Record<string, unknown>;
-  const eventId = typeof payload.event_id === "string" ? payload.event_id : "";
-  const eventType = typeof payload.type === "string" ? payload.type : "";
-  const orderId = typeof payload.order_id === "string" ? payload.order_id : "";
-
-  if (eventId.trim().length === 0) {
-    throw new BillingError("Webhook event id is required", 400);
-  }
-
-  if (eventType !== "payment_order.paid" && eventType !== "payment_order.failed") {
-    throw new BillingError("Webhook event type is unsupported", 400);
-  }
-
-  if (!isUuid(orderId)) {
-    throw new BillingError("Webhook order id is invalid", 400);
-  }
-
-  return { eventId, eventType, orderId };
+async function findOrderForEvent(
+  client: PoolClient,
+  provider: BillingProviderCode,
+  match: NormalizedWebhookEvent["orderMatch"],
+): Promise<PaymentOrderRow | undefined> {
+  // The lookup column is chosen from a fixed union (never user input), so the
+  // two branches stay fully parameterized with no interpolated values.
+  const text =
+    match.by === "id"
+      ? `SELECT ${ORDER_COLUMNS} FROM "Payment_orders" WHERE id = $1 AND provider = $2 LIMIT 1`
+      : `SELECT ${ORDER_COLUMNS} FROM "Payment_orders" WHERE provider_order_id = $1 AND provider = $2 LIMIT 1`;
+  const result = await client.query<PaymentOrderRow>(text, [match.value, provider]);
+  return result.rows[0];
 }
 
-function assertMockWebhookSignature(headers: Headers): void {
-  const expected =
-    process.env.BILLING_MOCK_WEBHOOK_SECRET ?? "marekto-mock-billing-secret";
-  const actual = headers.get("x-marekto-billing-signature");
-
-  if (!actual || actual !== expected) {
-    throw new BillingError("Invalid billing webhook signature", 401);
-  }
-}
-
-function assertSepayWebhookAuth(headers: Headers): void {
-  const expected = process.env.SEPAY_WEBHOOK_SECRET?.trim();
-
-  if (
-    !expected &&
-    process.env.NODE_ENV !== "production" &&
-    isSepaySandboxEnabled()
-  ) {
-    return;
-  }
-
-  const authorization = headers.get("authorization")?.trim();
-  const sandboxSecret = headers.get("x-sepay-webhook-secret")?.trim();
-
-  if (
-    !expected ||
-    (authorization !== `Apikey ${expected}` && sandboxSecret !== expected)
-  ) {
-    throw new BillingError("Invalid SePay webhook signature", 401);
-  }
-}
-
-function parseSepayWebhookPayload(bodyText: string): {
-  eventId: string;
-  paymentCode: string;
-  transferAmount: number;
-  transferType: string;
-  payload: Record<string, unknown>;
-} {
-  let parsed: unknown;
-
-  try {
-    parsed = JSON.parse(bodyText);
-  } catch {
-    throw new BillingError("Webhook payload is invalid", 400);
-  }
-
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new BillingError("Webhook payload is invalid", 400);
-  }
-
-  const payload = parsed as Record<string, unknown>;
-  const rawId = payload.id;
-  const eventId =
-    typeof rawId === "number" || typeof rawId === "string"
-      ? `sepay_${String(rawId).trim()}`
-      : "";
-  const rawTransferAmount = payload.transferAmount;
-  const transferAmount =
-    typeof rawTransferAmount === "number" ? rawTransferAmount : Number.NaN;
-  const transferType =
-    typeof payload.transferType === "string" ? payload.transferType.trim() : "";
-  const candidates = [
-    typeof payload.code === "string" ? payload.code : "",
-    typeof payload.content === "string" ? payload.content : "",
-    typeof payload.description === "string" ? payload.description : "",
-  ];
-  const paymentCode =
-    candidates
-      .map((candidate) => candidate.match(/\bMKT[A-Z0-9]{12}\b/i)?.[0])
-      .find(Boolean)
-      ?.toUpperCase() ?? "";
-
-  if (!eventId || eventId === "sepay_") {
-    throw new BillingError("SePay webhook id is required", 400);
-  }
-
-  if (!Number.isInteger(transferAmount) || transferAmount < 0) {
-    throw new BillingError("SePay transfer amount is invalid", 400);
-  }
-
-  if (!paymentCode) {
-    throw new BillingError("SePay payment code was not found", 400);
-  }
-
-  return { eventId, paymentCode, payload, transferAmount, transferType };
-}
-
+/**
+ * Activate a paid order and grant one paid period. Idempotent: a renewal extends
+ * from the later of now or the current period end so a re-run cannot stack time.
+ */
 async function activatePaidOrder(input: {
   client: PoolClient;
   eventId: string;
   order: PaymentOrderRow;
   provider: BillingProviderCode;
-}): Promise<void> {
-  await input.client.query(
+}): Promise<boolean> {
+  const claimedOrder = await input.client.query<{ id: string }>(
     'UPDATE "Payment_orders" SET status = $1, paid_at = COALESCE(paid_at, NOW()), updated_at = NOW() ' +
-      "WHERE id = $2",
+      "WHERE id = $2 AND status = 'pending' RETURNING id",
     ["paid", input.order.id],
   );
+
+  if (!claimedOrder.rows[0]) {
+    return false;
+  }
 
   await input.client.query(
     'INSERT INTO "Workspace_subscriptions" ' +
@@ -651,8 +596,10 @@ async function activatePaidOrder(input: {
       "ON CONFLICT (workspace_id) DO UPDATE SET " +
       "plan_code = EXCLUDED.plan_code, status = EXCLUDED.status, provider = EXCLUDED.provider, " +
       "provider_subscription_id = EXCLUDED.provider_subscription_id, " +
-      "provider_price_id = EXCLUDED.provider_price_id, current_period_start = EXCLUDED.current_period_start, " +
-      "current_period_end = EXCLUDED.current_period_end, last_webhook_event_id = EXCLUDED.last_webhook_event_id, " +
+      "provider_price_id = EXCLUDED.provider_price_id, " +
+      'current_period_start = COALESCE("Workspace_subscriptions".current_period_end, NOW()), ' +
+      'current_period_end = GREATEST("Workspace_subscriptions".current_period_end, NOW()) + INTERVAL \'1 month\', ' +
+      "last_webhook_event_id = EXCLUDED.last_webhook_event_id, " +
       "metadata = EXCLUDED.metadata, updated_at = NOW()",
     [
       input.order.workspace_id,
@@ -664,8 +611,28 @@ async function activatePaidOrder(input: {
       JSON.stringify({ payment_order_id: input.order.id }),
     ],
   );
+
+  return true;
 }
 
+function verifyAndParseWebhook(
+  provider: BillingProviderCode,
+  headers: Headers,
+  bodyText: string,
+): NormalizedWebhookEvent {
+  if (provider === "sepay") {
+    return verifyAndParseSepayWebhook(headers, bodyText, parseSepayConfig());
+  }
+  return verifyAndParseMockWebhook(headers, bodyText);
+}
+
+/**
+ * Authenticate, parse, and process a provider webhook/IPN. Only a verified paid
+ * event whose amount and currency exactly match the trusted stored order can
+ * activate a subscription. Duplicate events are recorded once and return
+ * `processed: false` (HTTP 200). No route/query parameter can reach this path —
+ * activation happens exclusively here.
+ */
 export async function processBillingWebhook(input: {
   headers: Headers;
   bodyText: string;
@@ -677,57 +644,7 @@ export async function processBillingWebhook(input: {
     throw new BillingError(`${provider} webhook adapter is not implemented yet`, 501);
   }
 
-  if (provider === "sepay") {
-    assertSepayWebhookAuth(input.headers);
-    const payload = parseSepayWebhookPayload(input.bodyText);
-
-    return withTransaction(async (client) => {
-      const eventResult = await client.query<BillingEventRow>(
-        'INSERT INTO "Billing_events" ' +
-          "(provider, provider_event_id, event_type, payload) " +
-          "VALUES ($1, $2, $3, $4::jsonb) " +
-          "ON CONFLICT (provider, provider_event_id) DO NOTHING RETURNING id",
-        [
-          provider,
-          payload.eventId,
-          `sepay.transfer.${payload.transferType || "unknown"}`,
-          JSON.stringify(payload.payload),
-        ],
-      );
-
-      if (!eventResult.rows[0]) {
-        return { processed: false, eventId: payload.eventId };
-      }
-
-      const orderResult = await client.query<PaymentOrderRow>(
-        'SELECT id, workspace_id, user_id, plan_code, provider, provider_order_id, checkout_url, ' +
-          "amount_cents, currency, status, expires_at, paid_at, created_at " +
-          'FROM "Payment_orders" WHERE provider = $1 AND provider_order_id = $2 LIMIT 1',
-        [provider, payload.paymentCode],
-      );
-      const order = orderResult.rows[0];
-
-      if (!order) {
-        throw new BillingError("Payment order not found", 404);
-      }
-
-      await client.query(
-        'UPDATE "Billing_events" SET workspace_id = $1, payment_order_id = $2 WHERE id = $3',
-        [order.workspace_id, order.id, eventResult.rows[0].id],
-      );
-
-      if (payload.transferType !== "in" || payload.transferAmount < order.amount_cents) {
-        return { processed: false, eventId: payload.eventId };
-      }
-
-      await activatePaidOrder({ client, eventId: payload.eventId, order, provider });
-
-      return { processed: true, eventId: payload.eventId };
-    });
-  }
-
-  assertMockWebhookSignature(input.headers);
-  const payload = parseMockWebhookPayload(input.bodyText);
+  const event = verifyAndParseWebhook(provider, input.headers, input.bodyText);
 
   return withTransaction(async (client) => {
     const eventResult = await client.query<BillingEventRow>(
@@ -737,27 +654,19 @@ export async function processBillingWebhook(input: {
         "ON CONFLICT (provider, provider_event_id) DO NOTHING RETURNING id",
       [
         provider,
-        payload.eventId,
-        payload.eventType,
-        JSON.stringify({
-          event_id: payload.eventId,
-          type: payload.eventType,
-          order_id: payload.orderId,
-        }),
+        event.providerEventId,
+        event.eventType,
+        JSON.stringify(event.sanitizedPayload),
       ],
     );
 
+    // Duplicate delivery: the event already exists. Acknowledge with 200 and do
+    // not re-activate.
     if (!eventResult.rows[0]) {
-      return { processed: false, eventId: payload.eventId };
+      return { processed: false, eventId: event.providerEventId };
     }
 
-    const orderResult = await client.query<PaymentOrderRow>(
-      'SELECT id, workspace_id, user_id, plan_code, provider, provider_order_id, checkout_url, ' +
-        "amount_cents, currency, status, expires_at, paid_at, created_at " +
-        'FROM "Payment_orders" WHERE id = $1 AND provider = $2 LIMIT 1',
-      [payload.orderId, provider],
-    );
-    const order = orderResult.rows[0];
+    const order = await findOrderForEvent(client, provider, event.orderMatch);
 
     if (!order) {
       throw new BillingError("Payment order not found", 404);
@@ -768,17 +677,97 @@ export async function processBillingWebhook(input: {
       [order.workspace_id, order.id, eventResult.rows[0].id],
     );
 
-    if (payload.eventType === "payment_order.failed") {
-      await client.query(
-        'UPDATE "Payment_orders" SET status = $1, updated_at = NOW() WHERE id = $2',
-        ["failed", order.id],
-      );
-      return { processed: true, eventId: payload.eventId };
+    // Validate amount/currency against the trusted stored order before acting.
+    // Mismatches are recorded (event persisted) but never activate entitlement.
+    if (event.expectedAmountCents !== null && event.expectedAmountCents !== order.amount_cents) {
+      return { processed: false, eventId: event.providerEventId };
+    }
+    if (
+      event.expectedCurrency !== null &&
+      event.expectedCurrency !== order.currency.toLowerCase()
+    ) {
+      return { processed: false, eventId: event.providerEventId };
     }
 
-    await activatePaidOrder({ client, eventId: payload.eventId, order, provider });
+    if (event.outcome === "paid") {
+      const activated = await activatePaidOrder({
+        client,
+        eventId: event.providerEventId,
+        order,
+        provider,
+      });
+      return { processed: activated, eventId: event.providerEventId };
+    }
 
-    return { processed: true, eventId: payload.eventId };
+    if (event.outcome === "failed" || event.outcome === "canceled") {
+      await client.query(
+        'UPDATE "Payment_orders" SET status = $1, updated_at = NOW() WHERE id = $2',
+        [event.outcome === "failed" ? "failed" : "canceled", order.id],
+      );
+      return { processed: true, eventId: event.providerEventId };
+    }
+
+    // Unsupported/ignored notification: recorded, no state change.
+    return { processed: false, eventId: event.providerEventId };
+  });
+}
+
+/**
+ * Server-only reconciliation for a pending SePay order. Queries the SePay REST
+ * API and, only if the provider confirms the exact order/amount/currency in a
+ * captured state, activates the subscription idempotently (repairing a missed
+ * IPN). Not wired to any public route; intended for an admin/cron-guarded caller.
+ */
+export async function reconcileSepayOrder(orderId: string): Promise<{
+  reconciled: boolean;
+  status: PaymentOrderStatus;
+}> {
+  assertUuid("orderId", orderId);
+  await initializeDatabase();
+
+  const provider = getBillingProvider();
+  if (provider !== "sepay") {
+    throw new BillingError("Reconciliation is only available for the SePay provider", 400);
+  }
+  const config = parseSepayConfig();
+
+  return withTransaction(async (client) => {
+    const orderResult = await client.query<PaymentOrderRow>(
+      `SELECT ${ORDER_COLUMNS} FROM "Payment_orders" WHERE id = $1 AND provider = $2 LIMIT 1`,
+      [orderId, provider],
+    );
+    const order = orderResult.rows[0];
+    if (!order) {
+      throw new BillingError("Payment order not found", 404);
+    }
+
+    if (order.status === "paid") {
+      return { reconciled: false, status: "paid" };
+    }
+    if (!order.provider_order_id) {
+      return { reconciled: false, status: normalizeOrderStatus(order.status) };
+    }
+
+    const lookup = await querySepayOrder(order.provider_order_id, config);
+
+    const matches =
+      lookup.found &&
+      lookup.orderStatus === "CAPTURED" &&
+      lookup.amountCents === order.amount_cents &&
+      (lookup.currency === null || lookup.currency === order.currency.toLowerCase());
+
+    if (!matches) {
+      return { reconciled: false, status: normalizeOrderStatus(order.status) };
+    }
+
+    await activatePaidOrder({
+      client,
+      eventId: `sepay_reconcile_${order.id}`,
+      order,
+      provider,
+    });
+
+    return { reconciled: true, status: "paid" };
   });
 }
 

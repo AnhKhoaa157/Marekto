@@ -210,6 +210,50 @@ function checkGemini(env: PreflightEnv, isProduction: boolean, result: Preflight
   void isProduction;
 }
 
+function checkBilling(env: PreflightEnv, isProduction: boolean, result: PreflightResult): void {
+  const provider = env.BILLING_PROVIDER?.trim().toLowerCase();
+
+  // Deprecated ambiguous sandbox toggles — surface so they get removed.
+  if (env.SEPAY_SANDBOX !== undefined || env.SEPAY_WEBHOOK_SECRET !== undefined) {
+    result.warnings.push(
+      "SEPAY_SANDBOX and SEPAY_WEBHOOK_SECRET are deprecated; use SEPAY_ENV and SEPAY_IPN_SECRET.",
+    );
+  }
+
+  if (provider !== "sepay") {
+    return;
+  }
+
+  const sepayEnv = env.SEPAY_ENV?.trim().toLowerCase();
+  if (sepayEnv !== "sandbox" && sepayEnv !== "production") {
+    result.errors.push('SEPAY_ENV must be "sandbox" or "production" when BILLING_PROVIDER=sepay.');
+  }
+
+  const required: Array<[string, string | undefined]> = [
+    ["SEPAY_MERCHANT_ID", env.SEPAY_MERCHANT_ID],
+    ["SEPAY_SECRET_KEY", env.SEPAY_SECRET_KEY],
+    ["SEPAY_IPN_SECRET", env.SEPAY_IPN_SECRET],
+  ];
+  const missing = required.filter(([, value]) => !value?.trim()).map(([name]) => name);
+
+  if (missing.length > 0) {
+    const message = `SePay billing is selected but these credentials are missing: ${missing.join(", ")}.`;
+    if (isProduction) {
+      result.errors.push(message);
+    } else {
+      result.warnings.push(`${message} Checkout stays disabled until they are set.`);
+    }
+  }
+
+  const timeoutRaw = env.SEPAY_REQUEST_TIMEOUT_MS?.trim();
+  if (timeoutRaw) {
+    const timeout = Number(timeoutRaw);
+    if (!Number.isInteger(timeout) || timeout < 1_000 || timeout > 120_000) {
+      result.errors.push("SEPAY_REQUEST_TIMEOUT_MS must be an integer between 1000 and 120000.");
+    }
+  }
+}
+
 /**
  * Run the full preflight against an environment map. `isProduction` defaults to
  * NODE_ENV === "production".
@@ -226,6 +270,7 @@ export function checkEnvironment(
   checkRedis(env, isProduction, result);
   checkSmtp(env, isProduction, result);
   checkGemini(env, isProduction, result);
+  checkBilling(env, isProduction, result);
 
   result.ok = result.errors.length === 0;
   return result;

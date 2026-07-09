@@ -46,6 +46,17 @@ export async function POST(request: NextRequest) {
       data: {
         url: checkout.checkoutUrl,
         order: checkout.order,
+        // Present when the provider requires a signed HTML form POST (SePay).
+        // The browser auto-submits it; only the signature (safe to expose) and
+        // public order fields are included — never the secret key.
+        form:
+          checkout.redirect.kind === "form"
+            ? {
+                action: checkout.redirect.action,
+                method: checkout.redirect.method,
+                fields: checkout.redirect.fields,
+              }
+            : null,
       },
     });
   } catch (error) {
