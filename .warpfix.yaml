@@ -1,0 +1,30 @@
+# WarpFix policy for Marekto: create repair PRs only for small, validated changes.
+version: 1
+
+repair:
+  auto_fix: true
+  confidence_threshold: 0.85
+  max_retries: 1
+  sandbox_timeout: 300
+
+quality_gates:
+  min_confidence: 0.85
+  require_tests: true
+  max_patch_lines: 60
+  block_on_security: true
+
+review:
+  auto_comment: true
+  severity_labels: true
+  mermaid_diagrams: false
+  effort_estimates: true
+
+ignore:
+  paths:
+    - "node_modules/**"
+    - ".next/**"
+    - "dist/**"
+    - "coverage/**"
+  errors:
+    - "ECONNRESET"
+    - "rate limit"
